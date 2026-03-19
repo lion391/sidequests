@@ -291,8 +291,30 @@ function initMain() {
 let score = 0, completed = [], lastRound = [], activeQuests = [];
 let isLoading = false, pendingIndex = -1, pendingPhotoFront = null, pendingPhotoBack = null;
 
+function activeQuestsKey() {
+  return `sq_aq_${groupId}_${todayKey()}`;
+}
+function saveActiveQuests() {
+  if (groupId) localStorage.setItem(activeQuestsKey(), JSON.stringify(activeQuests));
+}
+function loadActiveQuests() {
+  try {
+    const raw = localStorage.getItem(activeQuestsKey());
+    return raw ? JSON.parse(raw) : [];
+  } catch(e) { return []; }
+}
+function clearOldActiveQuests() {
+  const today = todayKey();
+  Object.keys(localStorage).forEach(key => {
+    if (key.startsWith('sq_aq_') && !key.includes('_' + today)) {
+      localStorage.removeItem(key);
+    }
+  });
+}
+
 function saveLocalProgress() {
-  localStorage.setItem('sq_progress', JSON.stringify({ score, completed, lastRound, dailySkips: getDailySkips(), activeQuests }));
+  localStorage.setItem('sq_progress', JSON.stringify({ score, completed, lastRound, dailySkips: getDailySkips() }));
+  saveActiveQuests();
 }
 function loadLocalProgress() {
   try {
@@ -300,7 +322,8 @@ function loadLocalProgress() {
     score = d.score || 0;
     completed = d.completed || [];
     lastRound = d.lastRound || [];
-    activeQuests = d.activeQuests || [];
+    activeQuests = loadActiveQuests();
+    clearOldActiveQuests();
   } catch(e) {}
 }
 function getDailySkips() {
@@ -686,6 +709,7 @@ window.skipQuest = function(i) {
   activeQuests[i] = null;
   if (activeQuestIndex === i) activeQuestIndex = -1;
   incrementDailySkip();
+  saveActiveQuests();
   updateMainUI();
   showToast(`Quest übersprungen. Noch ${10 - dailyUsedCount()} heute übrig.`);
   removeCard(i, 'skip-anim', checkAllDone);
@@ -1340,10 +1364,10 @@ window.declineTrade = async function() {
 let guideStep=0;
 window.guideNext = function() {
   guideStep++;
-  if(guideStep>=7){localStorage.setItem('sq_guided','1');el('onboarding').style.display='none';return;}
+  if(guideStep>=9){localStorage.setItem('sq_guided','1');el('onboarding').style.display='none';return;}
   document.querySelectorAll('.guide-slide').forEach((s,i)=>s.classList.toggle('active',i===guideStep));
   document.querySelectorAll('.guide-dot').forEach((d,i)=>d.classList.toggle('active',i===guideStep));
-  el('guideNextBtn').textContent=guideStep===6?'Loslegen ⚡':'Weiter →';
+  el('guideNextBtn').textContent=guideStep===8?'Loslegen ⚡':'Weiter →';
 };
 
 // ── SEASONAL QUEST FILTERING ──
@@ -2708,41 +2732,51 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <div class="guide-slide active" id="slide-0">
       <div class="guide-emoji">⚡</div>
       <div class="guide-title">Willkommen bei SideQuest</div>
-      <div class="guide-text">SideQuest bringt dich vom Handy weg — mit echten Aufgaben, echten Erlebnissen und einem gesunden Wettkampf mit Freunden.</div>
+      <div class="guide-text">SideQuest bringt dich vom Handy weg — mit echten Aufgaben, echten Erlebnissen und einem gesunden Wettkampf mit Freunden. Hier ist alles was du wissen musst.</div>
     </div>
     <div class="guide-slide" id="slide-1">
       <div class="guide-emoji">🎯</div>
-      <div class="guide-title">Deine täglichen Quests</div>
-      <div class="guide-text">Du bekommst 5 zufällige Quests — von "Geh 10 Minuten spazieren" bis "Sprich einen Fremden an". Du hast 10 Slots pro Tag: erledigen oder skippen, alles zählt.</div>
+      <div class="guide-title">Tägliche Quests</div>
+      <div class="guide-text">Du bekommst 5 zufällige Aufgaben pro Tag. Max. 10 Slots: erledigen oder skippen, beides zählt. Am nächsten Tag starten die Quests neu — nicht erledigte werden gelöscht.</div>
     </div>
     <div class="guide-slide" id="slide-2">
       <div class="guide-emoji">📸</div>
       <div class="guide-title">Beweisfoto & BeReal</div>
-      <div class="guide-text">Beim Abschliessen kannst du ein normales Foto machen oder den BeReal-Modus nutzen — der macht gleichzeitig ein Foto mit Vorder- und Rückkamera. Als Beweis, dass du wirklich dabei warst!</div>
+      <div class="guide-text">Beim Abschliessen machst du ein Beweisfoto — normal oder im BeReal-Modus (Vorder + Rückkamera). Freunde sehen es im Feed und können mit einem Reaktionsfoto antworten — das verschwindet nach dem Ansehen.</div>
     </div>
     <div class="guide-slide" id="slide-3">
-      <div class="guide-emoji">⚔️</div>
-      <div class="guide-title">Duelle & eigene Quests</div>
-      <div class="guide-text">Fordere Freunde zu einem Duell heraus — wer verliert, gibt Punkte ab. Oder erstell eigene Quests für die Gruppe: sie tauchen ab nächster Woche bei allen auf.</div>
+      <div class="guide-emoji">🗺️</div>
+      <div class="guide-title">GPS & Fitness</div>
+      <div class="guide-text">Beim Laufen oder Wandern kannst du den GPS-Tracker nutzen — er zeichnet die Strecke als Linie ohne Koordinaten. +10 Pts/km, Wochenrangliste, +100 Bonus für den Wochensieger. Uhr/Garmin: Distanz manuell in Einstellungen eingeben.</div>
     </div>
     <div class="guide-slide" id="slide-4">
-      <div class="guide-emoji">🏅</div>
-      <div class="guide-title">Monats-Rangliste</div>
-      <div class="guide-text">Jeden Monat startet die Rangliste neu. Die Gruppe legt am Anfang fest um was gespielt wird — Abendessen, Kinokarte, egal was. Der Erste gewinnt, der Letzte zahlt.</div>
+      <div class="guide-emoji">⚔️</div>
+      <div class="guide-title">Duelle</div>
+      <div class="guide-text">Fordere jemanden zu einem Duell heraus — du definierst Aufgabe und Punkteinsatz. Schafft die Person es in einem Monat, bekommt sie deine Punkte. Scheitert sie, bekommst du ihre. Unter "Duelle" im Quests-Tab.</div>
     </div>
     <div class="guide-slide" id="slide-5">
-      <div class="guide-emoji">🏃</div>
-      <div class="guide-title">Fitness & GPS</div>
-      <div class="guide-text">Im Fitness-Tab kannst du Läufe tracken — +10 Punkte pro km. Die Strecke wird als Linie gespeichert, ohne Karte oder Koordinaten. Wer pro Woche am meisten läuft, bekommt +100 Bonuspunkte.</div>
+      <div class="guide-emoji">✍️</div>
+      <div class="guide-title">Eigene Quests erstellen</div>
+      <div class="guide-text">Erstell eigene Quests mit Kategorie, Schwierigkeit, Jahreszeit und GPS-Option. "Nur Gruppe" oder "🌍 Global" — globale Quests tauchen bei allen SideQuest-Gruppen weltweit auf und vergrössern den Pool für alle.</div>
     </div>
     <div class="guide-slide" id="slide-6">
+      <div class="guide-emoji">🏅</div>
+      <div class="guide-title">Monats-Rangliste & Preis</div>
+      <div class="guide-text">Die Rangliste resettet jeden Monat. Im Feed stimmt die Gruppe ab um was gespielt wird — Abendessen, Kinokarte, egal. Erster gewinnt, Letzter zahlt.</div>
+    </div>
+    <div class="guide-slide" id="slide-7">
+      <div class="guide-emoji">🌟</div>
+      <div class="guide-title">Wochenquest & Tausch</div>
+      <div class="guide-text">Im Quests-Tab siehst du oben immer eine Wochenquest — bis zu 200 Punkte! Mit dem 🔄-Button kannst du einen Quest an einen Freund tauschen (einmal pro Tag).</div>
+    </div>
+    <div class="guide-slide" id="slide-8">
       <div class="guide-emoji">👥</div>
-      <div class="guide-title">Feed & Reaktionen</div>
-      <div class="guide-text">Im Feed siehst du was Freunde heute erledigt haben. Reagiere mit einem Foto — es verschwindet nachdem die Person es gesehen hat. Los geht's!</div>
+      <div class="guide-title">Mehrere Gruppen & Los!</div>
+      <div class="guide-text">Du kannst in mehreren Gruppen gleichzeitig sein — jede Gruppe hat ihre eigenen Quests. In den Einstellungen einfach wechseln. Über 280 Quests warten! 🚀</div>
     </div>
   </div>
   <div class="guide-dots" id="guideDots">
-    <div class="guide-dot active"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div>
+    <div class="guide-dot active"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div>
   </div>
   <button class="btn-guide-next" id="guideNextBtn" onclick="guideNext()">Weiter →</button>
 </div>
