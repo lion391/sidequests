@@ -1448,11 +1448,12 @@ function getCurrentSeason() {
 
 function updateWeatherDisplay() {
   if (!currentWeather) return;
-  const existing = el('weatherBadge');
-  if (existing) {
-    existing.textContent = `${getWeatherEmoji()} ${currentWeather.temp}°C`;
-    existing.title = `${currentWeather.desc} in ${currentWeather.city}`;
-  }
+  const badge = el('weatherBadge');
+  if (!badge) return;
+  badge.style.display = 'flex';
+  el('weatherEmoji').textContent = getWeatherEmoji();
+  el('weatherTemp').textContent = currentWeather.temp + '°C';
+  el('weatherCity').textContent = currentWeather.city;
 }
 
 // ── WEEK QUEST ──
@@ -2942,7 +2943,6 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <div class="logo">Side<span>Quest</span></div>
     <div style="display:flex;align-items:center;gap:10px">
       <div style="font-size:0.72rem;color:var(--muted)" id="mainUserName"></div>
-      <div id="weatherBadge" style="font-size:0.75rem;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:100px;padding:4px 10px;cursor:default" title="Aktuelles Wetter"></div>
       <div class="score-chip">🏆 <span class="pts" id="mainScore">0</span> <span style="color:var(--muted)">Pts</span></div>
       <button onclick="showInfoFor(currentTabId)" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:1rem">ℹ️</button>
       <button onclick="document.getElementById('settingsModal').style.display='flex';initSettings()" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:1rem">⚙️</button>
@@ -2956,6 +2956,13 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         <div class="level-name" id="mainLevelName">Couch-Krieger</div>
         <div class="level-sub" id="mainLevelSub">Noch 50 Pts bis zum nächsten Level</div>
       </div>
+    </div>
+
+    <!-- Weather strip -->
+    <div id="weatherBadge" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:8px 14px;margin-bottom:10px;font-size:0.82rem;color:var(--muted);display:flex;align-items:center;gap:8px">
+      <span id="weatherEmoji" style="font-size:1.2rem"></span>
+      <span id="weatherTemp" style="font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;color:var(--text)"></span>
+      <span id="weatherCity" style="font-size:0.7rem;color:var(--muted)"></span>
     </div>
 
     <div class="stats-row">
