@@ -157,24 +157,6 @@ el('btnLogout').onclick = async () => {
 };
 
 // ── GROUP ──
-function getSavedGroups() {
-  try { return JSON.parse(localStorage.getItem('sq_savedGroups') || '[]'); }
-  catch(e) { return []; }
-}
-function saveGroupToList(id, name, code) {
-  const groups = getSavedGroups().filter(g => g.id !== id);
-  groups.unshift({ id, name, code });
-  localStorage.setItem('sq_savedGroups', JSON.stringify(groups));
-  localStorage.setItem('sq_groupId', id);
-}
-function removeGroupFromList(id) {
-  const groups = getSavedGroups().filter(g => g.id !== id);
-  localStorage.setItem('sq_savedGroups', JSON.stringify(groups));
-  if (localStorage.getItem('sq_groupId') === id) {
-    localStorage.removeItem('sq_groupId');
-  }
-}
-
 el('btnCreateGroup').onclick = async () => {
   const name = el('groupName').value.trim();
   if (!name) return showToast('Gruppenname eingeben');
@@ -186,7 +168,7 @@ el('btnCreateGroup').onclick = async () => {
     createdAt: serverTimestamp()
   });
   groupId = ref.id;
-  saveGroupToList(groupId, name, code);
+  localStorage.setItem('sq_groupId', groupId);
   await loadGroup();
 };
 
@@ -202,18 +184,17 @@ el('btnJoinGroup').onclick = async () => {
   if (!members.includes(currentUser.uid)) {
     await updateDoc(doc(db, 'groups', groupId), { members: [...members, currentUser.uid] });
   }
-  saveGroupToList(groupId, gDoc.data().name, gDoc.data().code);
+  localStorage.setItem('sq_groupId', groupId);
   await loadGroup();
 };
 
 async function loadGroup() {
   const gDoc = await getDoc(doc(db, 'groups', groupId));
   if (!gDoc.exists()) {
-    removeGroupFromList(groupId);
+    localStorage.removeItem('sq_groupId');
     return showGroupScreen();
   }
   currentGroup = { id: groupId, ...gDoc.data() };
-  saveGroupToList(groupId, currentGroup.name, currentGroup.code);
   el('groupCodeDisplay').textContent = currentGroup.code;
   el('groupNameDisplay').textContent = currentGroup.name;
 
@@ -232,36 +213,8 @@ async function loadGroup() {
 }
 
 function showGroupScreen() {
-  const saved = getSavedGroups();
-  const switcher = el('savedGroupsList');
-  if (saved.length > 0) {
-    el('savedGroupsSection').style.display = 'block';
-    switcher.innerHTML = saved.map(g => `
-      <div class="saved-group-item">
-        <div style="flex:1">
-          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.9rem">${g.name}</div>
-          <div style="font-size:0.7rem;color:var(--muted)">Code: ${g.code}</div>
-        </div>
-        <button class="saved-group-btn" onclick="switchToGroup('${g.id}')">Öffnen</button>
-        <button class="saved-group-remove" onclick="removeSavedGroup('${g.id}')">✕</button>
-      </div>`).join('');
-  } else {
-    el('savedGroupsSection').style.display = 'none';
-  }
   showScreen('screen-group');
 }
-
-window.switchToGroup = async function(id) {
-  groupId = id;
-  localStorage.setItem('sq_groupId', id);
-  await loadGroup();
-};
-
-window.removeSavedGroup = function(id) {
-  removeGroupFromList(id);
-  showGroupScreen();
-  showToast('Gruppe entfernt');
-};
 
 // ── MAIN APP ──
 function initMain() {
@@ -2700,10 +2653,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .trade-member-btn{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:'Space Mono',monospace;font-size:0.8rem;cursor:pointer;transition:background 0.15s;}
 .trade-member-btn:hover{background:var(--border);}
 
-.saved-group-item{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;}
-.saved-group-btn{padding:8px 14px;background:var(--accent);color:var(--bg);font-family:'Syne',sans-serif;font-weight:700;font-size:0.78rem;border:none;border-radius:8px;cursor:pointer;}
-.saved-group-remove{padding:8px;background:transparent;border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:0.8rem;}
-.saved-group-remove:hover{color:var(--hard);border-color:var(--hard);}
+
 
 /* TOAST */
 .toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--surface2);border:1px solid var(--border);border-radius:100px;padding:12px 22px;font-size:0.82rem;z-index:500;transition:transform 0.4s cubic-bezier(0.34,1.56,0.64,1);white-space:nowrap;}
@@ -2810,14 +2760,6 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 <div class="screen" id="screen-group">
   <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.5rem;color:var(--accent);margin:30px 0 8px">⚡ SideQuest</div>
   <div style="color:var(--muted);font-size:0.8rem;margin-bottom:24px">Erstell eine Gruppe oder tritt einer bei</div>
-
-  <!-- Saved groups -->
-  <div id="savedGroupsSection" style="display:none;margin-bottom:20px">
-    <div style="font-family:'Syne',sans-serif;font-size:0.75rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Meine Gruppen</div>
-    <div id="savedGroupsList" style="display:flex;flex-direction:column;gap:8px"></div>
-    <div style="height:1px;background:var(--border);margin:20px 0"></div>
-  </div>
-
   <div class="group-card">
     <div class="group-card-title">Neue Gruppe erstellen</div>
     <input class="auth-input" id="groupName" type="text" placeholder="Gruppenname">
