@@ -208,6 +208,7 @@ function initMain() {
     el('onboarding').style.display = 'flex';
   }
   showTab('quests');
+  listenForTrades();
 }
 
 // ── LOCAL PROGRESS ──
@@ -491,6 +492,7 @@ function renderQuestCard(q, i) {
     <div class="quest-actions">
       <button class="action-btn btn-done" onclick="openProofModal(${i})">✅ Erledigt!</button>
       <button class="action-btn btn-skip" onclick="skipQuest(${i})">⏭ Skip</button>
+      <button class="action-btn" onclick="openTradeModal(${i})" style="color:var(--accent3);border-left:1px solid var(--border)">🔄 Tausch</button>
     </div>
   </div>`;
 }
@@ -937,7 +939,236 @@ async function loadLeaderboard() {
   }).join('');
 }
 
-// ── ONBOARDING ──
+// ── GROQ AI QUESTS ──
+const GROQ_KEY = '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';
+const AI_CATEGORIES = ['Sport','Natur','Sozial','Kreativ','Essen','Abenteuer','Selbstreflexion'];
+
+function aiQuestsToday() {
+  try {
+    const d = JSON.parse(localStorage.getItem('sq_ai_quests') || '{}');
+    if(d.date !== todayKey()) return 0;
+    return d.count || 0;
+  } catch(e) { return 0; }
+}
+function incrementAiQuests() {
+  const count = aiQuestsToday() + 1;
+  localStorage.setItem('sq_ai_quests', JSON.stringify({date: todayKey(), count}));
+}
+
+window.openAiModal = function() {
+  const left = 3 - aiQuestsToday();
+  el('aiLimitInfo').textContent = `Noch ${left} von 3 KI-Quests heute`;
+  el('aiCatBtns').innerHTML = AI_CATEGORIES.map(c =>
+    `<button class="ai-cat-btn" onclick="selectAiCat('${c}')">${c}</button>`
+  ).join('');
+  el('aiSelectedCat').value = '';
+  el('aiResult').style.display = 'none';
+  el('aiModal').style.display = 'flex';
+};
+window.closeAiModal = function() { el('aiModal').style.display = 'none'; };
+
+window.selectAiCat = function(cat) {
+  document.querySelectorAll('.ai-cat-btn').forEach(b => b.classList.toggle('active', b.textContent === cat));
+  el('aiSelectedCat').value = cat;
+};
+
+window.generateAiQuest = async function() {
+  const cat = el('aiSelectedCat').value;
+  if(!cat) { showToast('Bitte eine Kategorie wählen!'); return; }
+  if(aiQuestsToday() >= 3) { showToast('🛑 Limit von 3 KI-Quests heute erreicht!'); return; }
+
+  const btn = el('btnGenerateAi');
+  btn.disabled = true; btn.innerHTML = '<div class="spinner" style="border-top-color:#0d0d0f"></div> KI denkt nach...';
+  el('aiResult').style.display = 'none';
+
+  const usedTitles = [...completed.slice(0,15).map(q=>q.title), ...activeQuests.filter(Boolean).map(q=>q.t)].join(', ');
+
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_KEY}` },
+      body: JSON.stringify({
+        model: 'llama3-8b-8192',
+        max_tokens: 200,
+        messages: [{
+          role: 'user',
+          content: `Erstelle 1 kreative Sidequest auf Deutsch in der Kategorie "${cat}". 
+Die Quest soll Menschen dazu bringen ihr Handy wegzulegen und echte Dinge zu erleben.
+NICHT diese bereits gemachten: ${usedTitles || 'keine'}.
+Kein Singen/Tanzen in der Öffentlichkeit, nichts Peinliches.
+Natürliches Deutsch, keine wörtlichen Übersetzungen.
+Schwierigkeit: easy (10Pt), medium (25Pt), hard (50Pt) oder wild (75Pt).
+Antworte NUR mit diesem JSON (kein anderer Text):
+{"t":"Titel max 8 Wörter","d":"Beschreibung 2-3 Sätze","diff":"easy|medium|hard|wild","cat":"${cat}","e":"emoji"}`
+        }]
+      })
+    });
+    const data = await res.json();
+    const text = data.choices[0].message.content.replace(/```json|```/g,'').trim();
+    const quest = JSON.parse(text);
+
+    // Show preview
+    const pts = DIFF_PTS[quest.diff] || 10;
+    el('aiResultContent').innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+        <span class="diff-badge diff-${quest.diff}">${DIFF_DE[quest.diff]}</span>
+        <span class="pts-inline pts-${quest.diff}">+${pts} Pts</span>
+      </div>
+      <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;margin-bottom:6px">${quest.e} ${quest.t}</div>
+      <div style="font-size:0.78rem;color:var(--muted);line-height:1.6">${quest.d}</div>`;
+    el('aiResult').style.display = 'block';
+    el('aiResult').dataset.quest = JSON.stringify(quest);
+    incrementAiQuests();
+    el('aiLimitInfo').textContent = `Noch ${3 - aiQuestsToday()} von 3 KI-Quests heute`;
+  } catch(e) {
+    showToast('Fehler beim Generieren — versuch es nochmals');
+    console.error(e);
+  }
+  btn.disabled = false; btn.innerHTML = '✨ Quest generieren';
+};
+
+window.addAiQuestToList = function() {
+  try {
+    const quest = JSON.parse(el('aiResult').dataset.quest);
+    // Add to active quests in next free slot
+    const freeSlot = activeQuests.findIndex(q => q === null);
+    if(freeSlot >= 0) {
+      activeQuests[freeSlot] = quest;
+      const list = el('questList');
+      // Remove placeholder if present
+      const placeholder = list.querySelector('.quest-placeholder');
+      if(placeholder) placeholder.remove();
+      list.insertAdjacentHTML('beforeend', renderQuestCard(quest, freeSlot));
+    } else {
+      // All slots full — add as extra slot 5
+      activeQuests.push(quest);
+      el('questList').insertAdjacentHTML('beforeend', renderQuestCard(quest, activeQuests.length-1));
+    }
+    closeAiModal();
+    showTab('quests');
+    showToast(`✨ KI-Quest hinzugefügt!`);
+    updateMainUI();
+  } catch(e) { showToast('Fehler beim Hinzufügen'); }
+};
+
+// ── QUEST TAUSCHEN ──
+window.openTradeModal = async function(questIndex) {
+  // Check if already traded today
+  const tradeKey = `sq_traded_${todayKey()}`;
+  if(localStorage.getItem(tradeKey)) {
+    showToast('🔄 Du hast heute bereits einen Quest getauscht!');
+    return;
+  }
+  el('tradeQuestIndex').value = questIndex;
+  const q = activeQuests[questIndex];
+  el('tradeMyQuest').innerHTML = `
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:4px">Dein Quest:</div>
+    <div style="font-family:'Syne',sans-serif;font-weight:700">${q.e} ${q.t}</div>`;
+
+  // Load group members
+  el('tradeMemberList').innerHTML = '<div style="color:var(--muted);font-size:0.78rem">Lade Mitglieder...</div>';
+  el('tradeModal').style.display = 'flex';
+
+  const gDoc = await getDoc(doc(db,'groups',groupId));
+  const members = gDoc.data().members.filter(uid => uid !== currentUser.uid);
+  if(!members.length) {
+    el('tradeMemberList').innerHTML = '<div style="color:var(--muted);font-size:0.78rem">Keine anderen Mitglieder in der Gruppe</div>';
+    return;
+  }
+  let html = '';
+  for(const uid of members) {
+    const uDoc = await getDoc(doc(db,'users',uid));
+    if(!uDoc.exists()) continue;
+    const u = uDoc.data();
+    html += `<button class="trade-member-btn" onclick="sendTradeRequest('${uid}','${u.name||'Anonym'}',${questIndex})">
+      <div class="feed-avatar" style="width:32px;height:32px;font-size:0.85rem">${(u.name||'?')[0].toUpperCase()}</div>
+      ${u.name||'Anonym'}
+    </button>`;
+  }
+  el('tradeMemberList').innerHTML = html;
+};
+window.closeTradeModal = function() { el('tradeModal').style.display = 'none'; };
+
+window.sendTradeRequest = async function(targetUid, targetName, questIndex) {
+  const myQuest = activeQuests[questIndex];
+  const tradeKey = `sq_traded_${todayKey()}`;
+
+  try {
+    // Store trade request in Firestore
+    await addDoc(collection(db,'trades'), {
+      fromUid: currentUser.uid,
+      fromName: currentUser.displayName || 'Anonym',
+      toUid: targetUid,
+      groupId,
+      quest: myQuest,
+      date: todayKey(),
+      status: 'pending',
+      createdAt: serverTimestamp()
+    });
+    localStorage.setItem(tradeKey, '1');
+    closeTradeModal();
+    showToast(`🔄 Quest an ${targetName} geschickt!`);
+    // Remove the traded quest from active list
+    activeQuests[questIndex] = null;
+    removeCard(questIndex, 'skip-anim', checkAllDone);
+  } catch(e) { showToast('Fehler beim Senden'); console.error(e); }
+};
+
+// Listen for incoming trade requests
+function listenForTrades() {
+  if(!currentUser || !groupId) return;
+  const q = query(
+    collection(db,'trades'),
+    where('toUid','==',currentUser.uid),
+    where('date','==',todayKey()),
+    where('status','==','pending')
+  );
+  onSnapshot(q, snap => {
+    snap.docChanges().forEach(async change => {
+      if(change.type === 'added') {
+        const t = change.doc.data();
+        el('incomingTradeFrom').textContent = t.fromName;
+        el('incomingTradeQuest').innerHTML = `
+          <div style="font-family:'Syne',sans-serif;font-weight:700;margin-bottom:4px">${t.quest.e} ${t.quest.t}</div>
+          <div style="font-size:0.75rem;color:var(--muted)">${t.quest.d}</div>`;
+        el('incomingTradeId').value = change.doc.id;
+        el('incomingTradeModal').style.display = 'flex';
+      }
+    });
+  });
+}
+
+window.acceptTrade = async function() {
+  const tradeId = el('incomingTradeId').value;
+  const tradeDoc = await getDoc(doc(db,'trades',tradeId));
+  if(!tradeDoc.exists()) return;
+  const t = tradeDoc.data();
+  // Add quest to active list
+  const freeSlot = activeQuests.findIndex(q => q === null);
+  const quest = t.quest;
+  if(freeSlot >= 0) {
+    activeQuests[freeSlot] = quest;
+    const list = el('questList');
+    const placeholder = list.querySelector('.quest-placeholder');
+    if(placeholder) placeholder.remove();
+    list.insertAdjacentHTML('beforeend', renderQuestCard(quest, freeSlot));
+  } else {
+    activeQuests.push(quest);
+    el('questList').insertAdjacentHTML('beforeend', renderQuestCard(quest, activeQuests.length-1));
+  }
+  await updateDoc(doc(db,'trades',tradeId), {status:'accepted'});
+  el('incomingTradeModal').style.display = 'none';
+  showTab('quests');
+  showToast(`🔄 Quest von ${t.fromName} angenommen!`);
+  updateMainUI();
+};
+
+window.declineTrade = async function() {
+  const tradeId = el('incomingTradeId').value;
+  await updateDoc(doc(db,'trades',tradeId), {status:'declined'});
+  el('incomingTradeModal').style.display = 'none';
+  showToast('Quest abgelehnt');
+};
 let guideStep=0;
 window.guideNext = function() {
   guideStep++;
@@ -1032,7 +1263,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .quest-desc{font-size:0.75rem;color:var(--muted);line-height:1.5;}
 .quest-cat{font-size:0.65rem;color:var(--muted);margin-top:6px;}
 .seen-badge{font-size:0.6rem;color:var(--accent3);border:1px solid var(--accent3);background:rgba(79,195,247,0.08);padding:2px 7px;border-radius:100px;cursor:pointer;}
-.quest-actions{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--border);}
+.quest-actions{display:grid;grid-template-columns:1fr 1fr 1fr;border-top:1px solid var(--border);}
 .action-btn{padding:11px;border:none;background:transparent;font-family:'Space Mono',monospace;font-size:0.75rem;cursor:pointer;transition:background 0.15s;display:flex;align-items:center;justify-content:center;gap:5px;color:var(--muted);}
 .action-btn:hover{background:var(--surface2);}
 .btn-done{color:var(--accent);border-right:1px solid var(--border);}
@@ -1101,6 +1332,12 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .photo-opt-btn:hover{border-color:var(--accent);}
 .photo-preview-wrap{position:relative;margin-bottom:12px;}
 .photo-preview-wrap img{width:100%;border-radius:14px;max-height:240px;object-fit:cover;}
+
+.ai-cat-btn{padding:8px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:100px;color:var(--muted);font-family:'Space Mono',monospace;font-size:0.75rem;cursor:pointer;transition:all 0.15s;}
+.ai-cat-btn.active{background:var(--accent3);color:var(--bg);border-color:var(--accent3);font-weight:700;}
+.ai-cat-btn:hover{border-color:var(--accent3);color:var(--accent3);}
+.trade-member-btn{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:'Space Mono',monospace;font-size:0.8rem;cursor:pointer;transition:background 0.15s;}
+.trade-member-btn:hover{background:var(--border);}
 
 /* TOAST */
 .toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--surface2);border:1px solid var(--border);border-radius:100px;padding:12px 22px;font-size:0.82rem;z-index:500;transition:transform 0.4s cubic-bezier(0.34,1.56,0.64,1);white-space:nowrap;}
@@ -1251,6 +1488,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         <div class="quest-placeholder"><span style="font-size:2rem;display:block;margin-bottom:8px">✨</span>Drück den Knopf — 5 Abenteuer warten!</div>
       </div>
       <button class="btn-new-quest" id="newQuestBtn" style="display:flex"><span>⚡</span> 5 neue Sidequests</button>
+      <button class="btn-new-quest" onclick="openAiModal()" style="margin-top:8px;background:var(--surface);color:var(--accent3);border:1px solid var(--accent3)"><span>✨</span> KI-Quest erstellen</button>
     </div>
 
     <!-- FEED TAB -->
@@ -1344,6 +1582,51 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <button class="btn-cancel" style="margin-bottom:10px" id="btnLogout">🚪 Ausloggen</button>
     <button class="btn-cancel" onclick="localStorage.removeItem('sq_groupId');location.reload()">👥 Gruppe wechseln</button>
     <button class="btn-cancel" style="margin-top:10px" onclick="document.getElementById('settingsModal').style.display='none'">Schliessen</button>
+  </div>
+</div>
+
+<!-- AI QUEST MODAL -->
+<div class="modal-backdrop" id="aiModal" style="display:none">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">✨ KI-Quest erstellen</div>
+    <div class="modal-sub" id="aiLimitInfo">Noch 3 von 3 KI-Quests heute</div>
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:10px">Wähle eine Kategorie:</div>
+    <div id="aiCatBtns" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px"></div>
+    <input type="hidden" id="aiSelectedCat">
+    <div id="aiResult" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:14px">
+      <div id="aiResultContent"></div>
+      <button class="btn-confirm" style="margin-top:12px;margin-bottom:0" onclick="addAiQuestToList()">➕ Zu meinen Quests hinzufügen</button>
+    </div>
+    <button class="btn-confirm" id="btnGenerateAi" onclick="generateAiQuest()">✨ Quest generieren</button>
+    <button class="btn-cancel" onclick="closeAiModal()">Abbrechen</button>
+  </div>
+</div>
+
+<!-- TRADE MODAL -->
+<div class="modal-backdrop" id="tradeModal" style="display:none">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🔄 Quest tauschen</div>
+    <div class="modal-sub">Einmal pro Tag — du schickst deinen Quest, bekommst nichts zurück</div>
+    <div id="tradeMyQuest" style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:16px"></div>
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:10px">Senden an:</div>
+    <div id="tradeMemberList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px"></div>
+    <input type="hidden" id="tradeQuestIndex">
+    <button class="btn-cancel" onclick="closeTradeModal()">Abbrechen</button>
+  </div>
+</div>
+
+<!-- INCOMING TRADE MODAL -->
+<div class="modal-backdrop center" id="incomingTradeModal" style="display:none">
+  <div class="modal-sheet center-modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🔄 Quest erhalten!</div>
+    <div class="modal-sub"><span id="incomingTradeFrom"></span> hat dir einen Quest geschickt:</div>
+    <div id="incomingTradeQuest" style="background:var(--surface2);border:1px solid var(--accent3);border-radius:14px;padding:14px;margin-bottom:16px"></div>
+    <input type="hidden" id="incomingTradeId">
+    <button class="btn-confirm" onclick="acceptTrade()">✅ Annehmen</button>
+    <button class="btn-cancel" style="margin-top:8px" onclick="declineTrade()">Ablehnen</button>
   </div>
 </div>
 
