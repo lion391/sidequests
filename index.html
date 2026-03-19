@@ -553,11 +553,13 @@ function pickQuests() {
 
 function hasPrevHistory(title) { return completed.some(q=>q.title===title); }
 
-// Keywords that suggest a GPS-trackable activity
-const GPS_KEYWORDS = ['laufen','joggen','spazieren','wandern','velo','velotour','schwimmen','kanu','sup','lauf','km','kilometer','strecke','runde'];
+// GPS nur bei Aktivitäten wo man das Handy dabei hat (kein Schwimmen, Kanu etc.)
+const GPS_KEYWORDS = ['laufen','joggen','spazieren','wandern','velo','velotour','fahrrad','lauf','km','kilometer','strecke','runde','nordic walking','trail'];
+const GPS_EXCLUDE = ['schwimmen','swim','kanu','sup','tauchen'];
 
 function isGpsQuest(q) {
   const text = (q.t + ' ' + q.d).toLowerCase();
+  if (GPS_EXCLUDE.some(kw => text.includes(kw))) return false;
   return GPS_KEYWORDS.some(kw => text.includes(kw));
 }
 
@@ -567,6 +569,7 @@ let activeQuestIndex = -1;
 function renderQuestCard(q, i) {
   const pts = DIFF_PTS[q.diff];
   const seen = hasPrevHistory(q.t);
+  const gps = isGpsQuest(q) || (q.requiresGps && !((q.t+q.d).toLowerCase().includes('schwimm')));
   const isActive = activeQuestIndex === i;
 
   return `<div class="quest-card ${isActive ? 'quest-active' : ''}" id="card-${i}">
@@ -578,6 +581,7 @@ function renderQuestCard(q, i) {
           <span class="diff-badge diff-${q.diff}">${DIFF_DE[q.diff]}</span>
           <span class="pts-inline pts-${q.diff}">+${pts} Pts</span>
           ${seen?`<span class="seen-badge" onclick="showQuestHistory('${q.t.replace(/'/g,"\\'")}')">📂 Verlauf</span>`:''}
+          ${gps?`<span style="font-size:0.6rem;color:var(--accent3);border:1px solid var(--accent3);padding:2px 7px;border-radius:100px">🗺️ GPS</span>`:''}
           ${q.isCommunity&&!q.isGlobal?`<span style="font-size:0.6rem;color:var(--wild);border:1px solid var(--wild);padding:2px 7px;border-radius:100px">✍️ Community</span>`:''}
           ${q.isGlobal?`<span style="font-size:0.6rem;color:var(--accent3);border:1px solid var(--accent3);background:rgba(79,195,247,0.08);padding:2px 7px;border-radius:100px">🌍 Global</span>`:''}
         </div>
@@ -586,7 +590,8 @@ function renderQuestCard(q, i) {
         <div class="quest-cat">${q.e} ${q.cat}</div>
       </div>
     </div>
-    <div class="quest-actions">
+    <div class="quest-actions" style="grid-template-columns:${gps?'1fr 1fr 1fr 1fr':'1fr 1fr 1fr'}">
+      ${gps?`<button class="action-btn" onclick="startQuestGps(${i})" style="color:var(--accent);border-right:1px solid var(--border)">▶ Start</button>`:''}
       <button class="action-btn btn-done" onclick="openProofModal(${i})" style="border-right:1px solid var(--border)">✅ Fertig</button>
       <button class="action-btn btn-skip" onclick="skipQuest(${i})" style="border-right:1px solid var(--border)">⏭ Skip</button>
       <button class="action-btn" onclick="openTradeModal(${i})" style="color:var(--accent3)">🔄</button>
