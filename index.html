@@ -334,7 +334,6 @@ function updateMainUI() {
   const lvlSub = el('mainLevelSub');
   if(lvlSub) lvlSub.textContent = lvl.next === Infinity ? 'Maximales Level! 🎉' : `Noch ${lvl.next - score} Pts bis zum nächsten Level`;
   const daily = dailyUsedCount();
-  el('mainDailyCount').textContent = daily;
   el('mainTotalCount').textContent = completed.length;
   el('mainStreakFill').style.width = Math.min(100, (daily/10)*100) + '%';
   el('mainStreakCount').textContent = daily;
@@ -860,7 +859,53 @@ window.confirmComplete = async function() {
   pendingIndex = -1;
 };
 
-// ── FEED CLEANUP (delete entries older than today) ──
+// ── PROFILE MODAL ──
+window.openProfileModal = async function() {
+  el('profileNameInput').value = currentUser.displayName || '';
+  el('profileTotalQuests').textContent = completed.length;
+  el('profileTotalPts').textContent = score;
+  const lvl = getLevel(score);
+  el('profileLevel').textContent = lvl.icon;
+
+  // Load banner from localStorage
+  const banner = localStorage.getItem('sq_profile_banner');
+  if (banner) {
+    el('profileBannerImg').src = banner;
+    el('profileBannerImg').style.display = 'block';
+  } else {
+    el('profileBannerImg').style.display = 'none';
+  }
+  el('profileModal').style.display = 'flex';
+};
+
+window.saveProfileName = async function() {
+  const name = el('profileNameInput').value.trim();
+  if (!name) return showToast('Name eingeben');
+  try {
+    await updateProfile(currentUser, { displayName: name });
+    await updateDoc(doc(db,'users',currentUser.uid), { name });
+    el('mainUserName').textContent = name;
+    showToast('✅ Name gespeichert!');
+  } catch(e) { showToast('Fehler beim Speichern'); }
+};
+
+el('bannerInput').onchange = e => {
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    const data = ev.target.result;
+    localStorage.setItem('sq_profile_banner', data);
+    el('profileBannerImg').src = data;
+    el('profileBannerImg').style.display = 'block';
+    showToast('✅ Titelbild gespeichert!');
+  };
+  r.readAsDataURL(f);
+};
+
+// Load banner in leaderboard card
+function getProfileBanner() {
+  return localStorage.getItem('sq_profile_banner') || null;
+}
 async function cleanupOldFeedEntries() {
   try {
     const today = todayKey();
@@ -2818,7 +2863,6 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
   <div class="main-header">
     <div class="logo">Side<span>Quest</span></div>
     <div style="display:flex;align-items:center;gap:10px">
-      <div style="font-size:0.72rem;color:var(--muted)" id="mainUserName"></div>
       <div class="score-chip">🏆 <span class="pts" id="mainScore">0</span> <span style="color:var(--muted)">Pts</span></div>
       <button onclick="showInfoFor(window._getCurrentTab())" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:1rem">ℹ️</button>
       <button onclick="document.getElementById('settingsModal').style.display='flex';initSettings()" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:1rem">⚙️</button>
@@ -2826,32 +2870,26 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
   </div>
 
   <div class="main-body">
-    <div class="level-display">
+    <!-- Profile / Level row -->
+    <div class="level-display" onclick="openProfileModal()" style="cursor:pointer">
       <div class="level-icon" id="mainLevelIcon">🥚</div>
-      <div class="level-info">
-        <div class="level-name" id="mainLevelName">Couch-Krieger</div>
+      <div class="level-info" style="flex:1">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="level-name" id="mainLevelName">Couch-Krieger</div>
+          <div id="mainUserName" style="font-size:0.72rem;color:var(--muted)"></div>
+        </div>
         <div class="level-sub" id="mainLevelSub">Noch 50 Pts bis zum nächsten Level</div>
       </div>
+      <div style="font-size:0.75rem;color:var(--muted)">›</div>
     </div>
-
 
     <div class="stats-row">
-      <div class="stat-card"><span style="font-size:1.2rem">📅</span><div><div class="stat-val" id="mainDailyCount">0</div><div>heute / 10</div></div></div>
       <div class="stat-card"><span style="font-size:1.2rem">✅</span><div><div class="stat-val" id="mainTotalCount">0</div><div>total</div></div></div>
+      <div class="stat-card"><span style="font-size:1.2rem">🔥</span><div><div class="stat-val" id="mainStreakCount">0</div><div>heute / 10</div></div></div>
     </div>
 
-    <div class="streak-bar">
-      <span style="font-size:1.1rem">🔥</span>
-      <strong id="mainStreakCount" style="color:var(--text);font-family:'Syne',sans-serif">0</strong>
-      <span>heute</span>
-      <div class="progress-track"><div class="progress-fill" id="mainStreakFill" style="width:0%"></div></div>
-      <span style="font-size:0.7rem">10</span>
-    </div>
-
-    <!-- Group info bar -->
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;font-size:0.75rem;">
-      <span style="color:var(--muted)">Gruppe: <strong style="color:var(--text)" id="groupNameDisplay"></strong></span>
-      <span style="color:var(--accent3);cursor:pointer" onclick="navigator.clipboard&&navigator.clipboard.writeText(document.getElementById('groupCodeDisplay').textContent).then(()=>showToast('Code kopiert!'))">Code: <strong id="groupCodeDisplay"></strong> 📋</span>
+    <div class="progress-track" style="margin-bottom:14px;height:6px;border-radius:3px">
+      <div class="progress-fill" id="mainStreakFill" style="width:0%"></div>
     </div>
 
     <div class="tab-bar">
@@ -3048,8 +3086,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <div class="modal-title">⚙️ Einstellungen</div>
 
     <div style="font-size:0.72rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Account</div>
-    <button class="btn-cancel" style="margin-bottom:8px" id="btnLogout">🚪 Ausloggen</button>
-    <button class="btn-cancel" style="margin-bottom:20px" onclick="localStorage.removeItem('sq_groupId');showGroupScreen();document.getElementById('settingsModal').style.display='none'">👥 Gruppe wechseln</button>
+    <button class="btn-cancel" style="margin-bottom:20px" id="btnLogout">🚪 Ausloggen</button>
 
     <div style="font-size:0.72rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Fitness & Sport</div>
 
@@ -3062,6 +3099,16 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       <input type="checkbox" id="settingsSaveFitness" onchange="toggleSaveFitnessSetting(this.checked)" style="width:20px;height:20px;cursor:pointer;flex-shrink:0">
     </label>
 
+
+    <div style="font-size:0.72rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Gruppe</div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:8px;font-size:0.8rem">
+      <div style="margin-bottom:6px">📛 <strong id="groupNameDisplay"></strong></div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <span style="color:var(--muted)">Code: <strong id="groupCodeDisplay"></strong></span>
+        <button onclick="navigator.clipboard&&navigator.clipboard.writeText(el('groupCodeDisplay').textContent).then(()=>showToast('Code kopiert!'))" style="font-size:0.72rem;color:var(--accent3);background:transparent;border:1px solid var(--accent3);border-radius:6px;padding:3px 8px;cursor:pointer">📋 Kopieren</button>
+      </div>
+    </div>
+    <button class="btn-cancel" style="margin-bottom:20px" onclick="localStorage.removeItem('sq_groupId');showGroupScreen();document.getElementById('settingsModal').style.display='none'">👥 Gruppe wechseln</button>
 
     <div style="font-size:0.72rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Daten</div>
     <button class="btn-cancel" style="margin-bottom:8px;color:var(--medium);border-color:var(--medium)" onclick="confirmResetPoints()">🔄 Meine Punkte zurücksetzen</button>
@@ -3445,6 +3492,48 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <button class="btn-cancel" style="margin-top:8px" onclick="localStorage.setItem('sq_save_fitness','0');el('fitnessSavePrompt').style.display='none'">
       Nein danke
     </button>
+  </div>
+</div>
+
+<!-- PROFILE MODAL -->
+<div class="modal-backdrop" id="profileModal" style="display:none" onclick="if(event.target===this)this.style.display='none'">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+
+    <!-- Banner -->
+    <div id="profileBanner" style="height:120px;border-radius:14px;margin-bottom:16px;display:flex;align-items:flex-end;padding:12px;background:linear-gradient(135deg,var(--accent),var(--wild));position:relative;overflow:hidden;cursor:pointer" onclick="el('bannerInput').click()">
+      <img id="profileBannerImg" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none">
+      <div style="position:relative;z-index:1;font-size:0.7rem;color:rgba(255,255,255,0.8)">📷 Titelbild ändern</div>
+    </div>
+    <input type="file" id="bannerInput" accept="image/*" style="display:none">
+
+    <!-- Name edit -->
+    <div style="font-size:0.72rem;color:var(--muted);margin-bottom:6px">Dein Name</div>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <input class="auth-input" id="profileNameInput" type="text" placeholder="Dein Name" style="flex:1;margin:0">
+      <button class="btn-confirm" onclick="saveProfileName()" style="width:auto;padding:10px 16px">✅</button>
+    </div>
+
+    <!-- Stats -->
+    <div style="background:var(--surface2);border-radius:14px;padding:16px;margin-bottom:16px">
+      <div style="font-family:'Syne',sans-serif;font-size:0.7rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:12px">Meine Statistik</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+        <div style="text-align:center">
+          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.4rem;color:var(--accent)" id="profileTotalQuests">0</div>
+          <div style="font-size:0.65rem;color:var(--muted)">Quests total</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.4rem;color:var(--accent3)" id="profileTotalPts">0</div>
+          <div style="font-size:0.65rem;color:var(--muted)">Punkte total</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.4rem;color:var(--wild)" id="profileLevel">🥚</div>
+          <div style="font-size:0.65rem;color:var(--muted)">Level</div>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-cancel" onclick="el('profileModal').style.display='none'">Schliessen</button>
   </div>
 </div>
 
