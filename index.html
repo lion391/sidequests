@@ -984,30 +984,34 @@ window.generateAiQuest = async function() {
   const usedTitles = [...completed.slice(0,15).map(q=>q.title), ...activeQuests.filter(Boolean).map(q=>q.t)].join(', ');
 
   try {
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_KEY}` },
+      headers: {
+        'Content-Type': 'application/json',
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+        'x-api-key': 'YOUR_KEY_HERE'
+      },
       body: JSON.stringify({
-        model: 'llama3-8b-8192',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 200,
         messages: [{
           role: 'user',
-          content: `Erstelle 1 kreative Sidequest auf Deutsch in der Kategorie "${cat}". 
+          content: `Erstelle 1 kreative Sidequest auf Deutsch in der Kategorie "${cat}".
 Die Quest soll Menschen dazu bringen ihr Handy wegzulegen und echte Dinge zu erleben.
 NICHT diese bereits gemachten: ${usedTitles || 'keine'}.
 Kein Singen/Tanzen in der Öffentlichkeit, nichts Peinliches.
 Natürliches Deutsch, keine wörtlichen Übersetzungen.
 Schwierigkeit: easy (10Pt), medium (25Pt), hard (50Pt) oder wild (75Pt).
-Antworte NUR mit diesem JSON (kein anderer Text):
+Antworte NUR mit diesem JSON (kein anderer Text, keine Backticks):
 {"t":"Titel max 8 Wörter","d":"Beschreibung 2-3 Sätze","diff":"easy|medium|hard|wild","cat":"${cat}","e":"emoji"}`
         }]
       })
     });
     const data = await res.json();
-    const text = data.choices[0].message.content.replace(/```json|```/g,'').trim();
+    const text = data.content[0].text.replace(/```json|```/g,'').trim();
     const quest = JSON.parse(text);
 
-    // Show preview
     const pts = DIFF_PTS[quest.diff] || 10;
     el('aiResultContent').innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
@@ -1176,6 +1180,36 @@ window.guideNext = function() {
   document.querySelectorAll('.guide-slide').forEach((s,i)=>s.classList.toggle('active',i===guideStep));
   document.querySelectorAll('.guide-dot').forEach((d,i)=>d.classList.toggle('active',i===guideStep));
   el('guideNextBtn').textContent=guideStep===4?'Loslegen ⚡':'Weiter →';
+};
+
+// ── RESET & DELETE ──
+window.confirmResetPoints = function() {
+  el('settingsModal').style.display = 'none';
+  el('confirmResetModal').style.display = 'flex';
+};
+window.resetMyPoints = async function() {
+  score = 0; completed = []; lastRound = []; activeQuests = [];
+  saveLocalProgress();
+  try { await updateDoc(doc(db,'users',currentUser.uid), {score:0}); } catch(e) {}
+  el('confirmResetModal').style.display = 'none';
+  updateMainUI();
+  renderLocalHistory();
+  el('questList').innerHTML = '<div class="quest-placeholder"><span style="font-size:2rem;display:block;margin-bottom:8px">✨</span>Drück den Knopf — 5 Abenteuer warten!</div>';
+  el('newQuestBtn').style.display = 'flex';
+  showToast('✅ Punkte zurückgesetzt');
+};
+window.confirmDeleteGroup = function() {
+  el('settingsModal').style.display = 'none';
+  el('confirmDeleteGroupModal').style.display = 'flex';
+};
+window.deleteGroup = async function() {
+  try {
+    await deleteDoc(doc(db,'groups',groupId));
+    localStorage.removeItem('sq_groupId');
+    el('confirmDeleteGroupModal').style.display = 'none';
+    showToast('Gruppe gelöscht');
+    setTimeout(() => location.reload(), 1000);
+  } catch(e) { showToast('Fehler — nur der Ersteller kann löschen'); console.error(e); }
 };
 
 el('newQuestBtn').addEventListener('click', loadAllQuests);
@@ -1488,7 +1522,6 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         <div class="quest-placeholder"><span style="font-size:2rem;display:block;margin-bottom:8px">✨</span>Drück den Knopf — 5 Abenteuer warten!</div>
       </div>
       <button class="btn-new-quest" id="newQuestBtn" style="display:flex"><span>⚡</span> 5 neue Sidequests</button>
-      <button class="btn-new-quest" onclick="openAiModal()" style="margin-top:8px;background:var(--surface);color:var(--accent3);border:1px solid var(--accent3)"><span>✨</span> KI-Quest erstellen</button>
     </div>
 
     <!-- FEED TAB -->
@@ -1579,29 +1612,41 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
   <div class="modal-sheet center-modal">
     <div class="modal-handle"></div>
     <div class="modal-title">⚙️ Einstellungen</div>
-    <button class="btn-cancel" style="margin-bottom:10px" id="btnLogout">🚪 Ausloggen</button>
-    <button class="btn-cancel" onclick="localStorage.removeItem('sq_groupId');location.reload()">👥 Gruppe wechseln</button>
-    <button class="btn-cancel" style="margin-top:10px" onclick="document.getElementById('settingsModal').style.display='none'">Schliessen</button>
+
+    <div style="font-size:0.72rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Account</div>
+    <button class="btn-cancel" style="margin-bottom:8px" id="btnLogout">🚪 Ausloggen</button>
+    <button class="btn-cancel" style="margin-bottom:20px" onclick="localStorage.removeItem('sq_groupId');location.reload()">👥 Gruppe wechseln</button>
+
+    <div style="font-size:0.72rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Daten</div>
+    <button class="btn-cancel" style="margin-bottom:8px;color:var(--medium);border-color:var(--medium)" onclick="confirmResetPoints()">🔄 Meine Punkte zurücksetzen</button>
+    <button class="btn-cancel" style="margin-bottom:20px;color:var(--hard);border-color:var(--hard)" onclick="confirmDeleteGroup()">🗑️ Gruppe löschen</button>
+
+    <button class="btn-cancel" onclick="document.getElementById('settingsModal').style.display='none'">Schliessen</button>
   </div>
 </div>
 
-<!-- AI QUEST MODAL -->
-<div class="modal-backdrop" id="aiModal" style="display:none">
-  <div class="modal-sheet">
+<!-- CONFIRM RESET MODAL -->
+<div class="modal-backdrop center" id="confirmResetModal" style="display:none">
+  <div class="modal-sheet center-modal">
     <div class="modal-handle"></div>
-    <div class="modal-title">✨ KI-Quest erstellen</div>
-    <div class="modal-sub" id="aiLimitInfo">Noch 3 von 3 KI-Quests heute</div>
-    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:10px">Wähle eine Kategorie:</div>
-    <div id="aiCatBtns" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px"></div>
-    <input type="hidden" id="aiSelectedCat">
-    <div id="aiResult" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:14px">
-      <div id="aiResultContent"></div>
-      <button class="btn-confirm" style="margin-top:12px;margin-bottom:0" onclick="addAiQuestToList()">➕ Zu meinen Quests hinzufügen</button>
-    </div>
-    <button class="btn-confirm" id="btnGenerateAi" onclick="generateAiQuest()">✨ Quest generieren</button>
-    <button class="btn-cancel" onclick="closeAiModal()">Abbrechen</button>
+    <div class="modal-title">🔄 Punkte zurücksetzen?</div>
+    <div style="font-size:0.8rem;color:var(--muted);line-height:1.7;margin-bottom:20px">Deine Punkte, Level und lokale Historie werden auf 0 zurückgesetzt. Die Einträge im Feed und Rangliste bleiben bis Ende Tag sichtbar.</div>
+    <button class="btn-confirm" style="background:var(--medium);margin-bottom:8px" onclick="resetMyPoints()">Ja, zurücksetzen</button>
+    <button class="btn-cancel" onclick="el('confirmResetModal').style.display='none'">Abbrechen</button>
   </div>
 </div>
+
+<!-- CONFIRM DELETE GROUP MODAL -->
+<div class="modal-backdrop center" id="confirmDeleteGroupModal" style="display:none">
+  <div class="modal-sheet center-modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🗑️ Gruppe löschen?</div>
+    <div style="font-size:0.8rem;color:var(--muted);line-height:1.7;margin-bottom:20px">Die Gruppe wird für alle Mitglieder gelöscht. Alle werden zur Gruppenauswahl weitergeleitet. Persönliche Punkte und Historie bleiben erhalten.</div>
+    <button class="btn-confirm" style="background:var(--hard);margin-bottom:8px" onclick="deleteGroup()">Ja, löschen</button>
+    <button class="btn-cancel" onclick="el('confirmDeleteGroupModal').style.display='none'">Abbrechen</button>
+  </div>
+</div>
+
 
 <!-- TRADE MODAL -->
 <div class="modal-backdrop" id="tradeModal" style="display:none">
