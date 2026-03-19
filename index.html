@@ -566,10 +566,25 @@ function pickQuests() {
 
 function hasPrevHistory(title) { return completed.some(q=>q.title===title); }
 
+// Keywords that suggest a GPS-trackable activity
+const GPS_KEYWORDS = ['laufen','joggen','spazieren','wandern','velo','velotour','schwimmen','kanu','sup','lauf','km','kilometer','strecke','runde'];
+
+function isGpsQuest(q) {
+  const text = (q.t + ' ' + q.d).toLowerCase();
+  return GPS_KEYWORDS.some(kw => text.includes(kw));
+}
+
+// Track which quest index is currently "active" (started but not done)
+let activeQuestIndex = -1;
+
 function renderQuestCard(q, i) {
   const pts = DIFF_PTS[q.diff];
   const seen = hasPrevHistory(q.t);
-  return `<div class="quest-card" id="card-${i}">
+  const gps = isGpsQuest(q);
+  const isActive = activeQuestIndex === i;
+
+  return `<div class="quest-card ${isActive ? 'quest-active' : ''}" id="card-${i}">
+    ${isActive ? `<div class="quest-active-bar">⏱ Läuft gerade...</div>` : ''}
     <div class="quest-top">
       <div class="quest-number">${i+1}</div>
       <div class="quest-body">
@@ -577,16 +592,18 @@ function renderQuestCard(q, i) {
           <span class="diff-badge diff-${q.diff}">${DIFF_DE[q.diff]}</span>
           <span class="pts-inline pts-${q.diff}">+${pts} Pts</span>
           ${seen?`<span class="seen-badge" onclick="showQuestHistory('${q.t.replace(/'/g,"\\'")}')">📂 Verlauf</span>`:''}
+          ${gps?`<span style="font-size:0.6rem;color:var(--accent3);border:1px solid var(--accent3);padding:2px 7px;border-radius:100px">🗺️ GPS</span>`:''}
         </div>
         <div class="quest-title">${q.t}</div>
         <div class="quest-desc">${q.d}</div>
         <div class="quest-cat">${q.e} ${q.cat}</div>
       </div>
     </div>
-    <div class="quest-actions">
-      <button class="action-btn btn-done" onclick="openProofModal(${i})">✅ Erledigt!</button>
-      <button class="action-btn btn-skip" onclick="skipQuest(${i})">⏭ Skip</button>
-      <button class="action-btn" onclick="openTradeModal(${i})" style="color:var(--accent3);border-left:1px solid var(--border)">🔄 Tausch</button>
+    <div class="quest-actions" style="grid-template-columns:${gps ? '1fr 1fr 1fr 1fr' : '1fr 1fr 1fr'}">
+      ${gps ? `<button class="action-btn" onclick="startQuestGps(${i})" style="color:var(--accent);border-right:1px solid var(--border)">▶ Start</button>` : ''}
+      <button class="action-btn btn-done" onclick="openProofModal(${i})" style="border-right:1px solid var(--border)">✅ Fertig</button>
+      <button class="action-btn btn-skip" onclick="skipQuest(${i})" style="border-right:1px solid var(--border)">⏭ Skip</button>
+      <button class="action-btn" onclick="openTradeModal(${i})" style="color:var(--accent3)">🔄</button>
     </div>
   </div>`;
 }
@@ -648,6 +665,7 @@ window.skipQuest = function(i) {
   if(!activeQuests[i]) return;
   if(dailyUsedCount() >= 10) { showToast('🛑 Tageslimit von 10 erreicht!'); return; }
   activeQuests[i] = null;
+  if (activeQuestIndex === i) activeQuestIndex = -1;
   incrementDailySkip();
   updateMainUI();
   showToast(`Quest übersprungen. Noch ${10 - dailyUsedCount()} heute übrig.`);
@@ -775,7 +793,8 @@ window.confirmComplete = async function() {
     localPhoto: pendingPhotoBack||null
   };
   completed.unshift(entry);
-  activeQuests[pendingIndex]=null;
+  activeQuests[pendingIndex] = null;
+  if (activeQuestIndex === pendingIndex) activeQuestIndex = -1;
   saveLocalProgress();
 
   // Save to Firestore for social features
@@ -1588,6 +1607,171 @@ window.markChallengeFailed = async function(id) {
   loadChallengesTab();
   showToast(`⚔️ Challenge gescheitert — +${c.pts} Punkte für dich!`);
 };
+
+// ── GPS TRACKER ──
+let gpsPoints = [], gpsWatchId = null, gpsTotalDistance = 0, gpsRunning = false, gpsPaused = false;
+
+function haversineDistance(a, b) {
+  const R = 6371;
+  const dLat = (b.lat - a.lat) * Math.PI / 180;
+  const dLng = (b.lng - a.lng) * Math.PI / 180;
+  const x = Math.sin(dLat/2)**2 + Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+}
+
+function gpsDrawRoute() {
+  const canvas = el('gpsCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  if (gpsPoints.length < 2) return;
+  el('gpsEmptyMsg').style.display = 'none';
+
+  const lats = gpsPoints.map(p => p.lat);
+  const lngs = gpsPoints.map(p => p.lng);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+  const pad = 30;
+  const rangeX = maxLng - minLng || 0.0001;
+  const rangeY = maxLat - minLat || 0.0001;
+  const toC = p => ({
+    x: pad + ((p.lng - minLng) / rangeX) * (W - 2*pad),
+    y: H - pad - ((p.lat - minLat) / rangeY) * (H - 2*pad)
+  });
+
+  // Route line
+  ctx.beginPath();
+  ctx.strokeStyle = '#c8f135'; ctx.lineWidth = 3;
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  const f = toC(gpsPoints[0]);
+  ctx.moveTo(f.x, f.y);
+  gpsPoints.slice(1).forEach(p => { const c = toC(p); ctx.lineTo(c.x, c.y); });
+  ctx.stroke();
+
+  // Start dot (blue)
+  const s = toC(gpsPoints[0]);
+  ctx.beginPath(); ctx.arc(s.x, s.y, 6, 0, Math.PI*2);
+  ctx.fillStyle = '#4fc3f7'; ctx.fill();
+
+  // End dot (red)
+  const e = toC(gpsPoints[gpsPoints.length-1]);
+  ctx.beginPath(); ctx.arc(e.x, e.y, 6, 0, Math.PI*2);
+  ctx.fillStyle = '#ff4f6d'; ctx.fill();
+}
+
+window.openGpsTracker = function() {
+  gpsPoints = []; gpsTotalDistance = 0; gpsRunning = false; gpsPaused = false; gpsWatchId = null;
+  el('gpsDistance').textContent = '0.00';
+  el('gpsStatus').textContent = 'Bereit zum Starten';
+  el('gpsEmptyMsg').style.display = 'flex';
+  el('gpsStartBtn').style.display = 'flex';
+  el('gpsPauseBtn').style.display = 'none';
+  el('gpsStopBtn').style.display = 'none';
+  el('gpsUseBtn').style.display = 'none';
+  el('gpsCanvas').getContext('2d').clearRect(0,0,400,260);
+  el('proofModal').style.display = 'none';
+  el('gpsModal').style.display = 'flex';
+};
+
+window.gpsStart = function() {
+  if (!navigator.geolocation) { showToast('GPS nicht verfügbar'); return; }
+  gpsRunning = true; gpsPaused = false;
+  el('gpsStartBtn').style.display = 'none';
+  el('gpsPauseBtn').style.display = 'flex';
+  el('gpsStopBtn').style.display = 'flex';
+  el('gpsStatus').textContent = '📍 Tracking läuft...';
+  gpsWatchId = navigator.geolocation.watchPosition(
+    pos => {
+      if (gpsPaused) return;
+      const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      if (gpsPoints.length > 0) {
+        const dist = haversineDistance(gpsPoints[gpsPoints.length-1], pt);
+        if (dist < 0.005) return; // filter noise < 5m
+        gpsTotalDistance += dist;
+        el('gpsDistance').textContent = gpsTotalDistance.toFixed(2);
+      }
+      gpsPoints.push(pt);
+      gpsDrawRoute();
+    },
+    err => { el('gpsStatus').textContent = '⚠️ GPS Fehler — check Berechtigungen'; },
+    { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
+  );
+};
+
+window.gpsPause = function() {
+  gpsPaused = !gpsPaused;
+  el('gpsPauseBtn').textContent = gpsPaused ? '▶ Weiter' : '⏸ Pause';
+  el('gpsStatus').textContent = gpsPaused ? '⏸ Pausiert' : '📍 Tracking läuft...';
+};
+
+window.gpsStop = function() {
+  if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
+  gpsRunning = false;
+  el('gpsPauseBtn').style.display = 'none';
+  el('gpsStopBtn').style.display = 'none';
+  el('gpsStatus').textContent = `✅ Fertig — ${gpsTotalDistance.toFixed(2)} km`;
+  if (gpsPoints.length > 1) el('gpsUseBtn').style.display = 'block';
+};
+
+window.gpsUseAsProof = function() {
+  gpsDrawRoute();
+  const canvas = el('gpsCanvas');
+  const ctx = canvas.getContext('2d');
+  // Distance overlay — no coordinates
+  ctx.fillStyle = 'rgba(13,13,15,0.75)';
+  ctx.beginPath(); ctx.roundRect(10, 10, 155, 46, 8); ctx.fill();
+  ctx.fillStyle = '#c8f135';
+  ctx.font = 'bold 24px sans-serif';
+  ctx.fillText(`${gpsTotalDistance.toFixed(2)} km`, 18, 40);
+  pendingPhotoBack = canvas.toDataURL('image/png');
+  pendingPhotoFront = null;
+  el('gpsModal').style.display = 'none';
+  el('proofModal').style.display = 'flex';
+  el('photoPlaceholder').style.display = 'none';
+  el('beRealResult').src = pendingPhotoBack;
+  el('beRealResult').style.display = 'block';
+  showToast(`🗺️ ${gpsTotalDistance.toFixed(2)} km als Beweis gespeichert!`);
+};
+
+window.gpsCancel = function() {
+  if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
+  el('gpsModal').style.display = 'none';
+  // If came from a quest start, go back to quest list
+  if (activeQuestIndex >= 0) {
+    // just close, quest stays active
+  } else {
+    el('proofModal').style.display = 'flex';
+  }
+};
+
+window.startQuestGps = function(i) {
+  activeQuestIndex = i;
+  // Re-render card to show active state
+  const card = el('card-' + i);
+  if (card) card.outerHTML = renderQuestCard(activeQuests[i], i);
+  openGpsTracker(i);
+};
+
+// Override openGpsTracker to accept optional quest index
+const _origOpenGps = window.openGpsTracker;
+window.openGpsTracker = function(questIdx) {
+  _origOpenGps();
+  // Store whether we came from a quest start or proof modal
+  el('gpsModal').dataset.fromQuest = questIdx !== undefined ? '1' : '0';
+  el('gpsModal').dataset.questIdx = questIdx !== undefined ? questIdx : '';
+};
+
+// Override gpsUseAsProof to open proof modal for the right quest
+const _origUseAsProof = window.gpsUseAsProof;
+window.gpsUseAsProof = function() {
+  _origUseAsProof();
+  // If started from a quest, open proof modal for that quest
+  const questIdx = parseInt(el('gpsModal').dataset.questIdx);
+  if (!isNaN(questIdx) && questIdx >= 0) {
+    openProofModal(questIdx);
+  }
+};
+
 window.confirmResetPoints = function() {
   el('settingsModal').style.display = 'none';
   el('confirmResetModal').style.display = 'flex';
@@ -1686,7 +1870,10 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .quest-card.skip-anim{animation:fadeOut 0.3s ease forwards;}
 @keyframes completePop{0%{transform:scale(1);opacity:1;}30%{transform:scale(1.02);}100%{transform:scale(0.95);opacity:0;max-height:0;margin:0;padding:0;}}
 @keyframes fadeOut{to{opacity:0;transform:translateX(20px);}}
-.quest-card.skeleton{animation:pulse 1.5s ease infinite;min-height:100px;}
+.quest-card.quest-active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
+.quest-active-bar{background:var(--accent);color:var(--bg);font-family:'Syne',sans-serif;font-weight:700;font-size:0.72rem;padding:6px 16px;display:flex;align-items:center;gap:6px;}
+.quest-active-bar::before{content:'';width:8px;height:8px;background:var(--bg);border-radius:50%;animation:blink 1s ease infinite;}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:0.3;}}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
 .quest-top{padding:14px 16px 12px;display:flex;gap:12px;align-items:flex-start;}
 .quest-number{font-family:'Syne',sans-serif;font-weight:800;font-size:1.4rem;color:var(--border);line-height:1;min-width:28px;padding-top:2px;}
@@ -1991,9 +2178,10 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <div class="modal-sub" id="proofQuestName"></div>
 
     <div id="photoPlaceholder" style="display:flex">
-      <div class="photo-options">
-        <button class="photo-opt-btn" onclick="takeNormalPhoto()">📷<br>Normales Foto</button>
-        <button class="photo-opt-btn" onclick="takeBeReal()">📸<br>BeReal<br><span style="font-size:0.65rem;color:var(--muted)">Vorder + Rückseite</span></button>
+      <div class="photo-options" style="grid-template-columns:1fr 1fr 1fr">
+        <button class="photo-opt-btn" onclick="takeNormalPhoto()">📷<br>Foto</button>
+        <button class="photo-opt-btn" onclick="takeBeReal()">📸<br>BeReal<br><span style="font-size:0.65rem;color:var(--muted)">Vorder+Rück</span></button>
+        <button class="photo-opt-btn" onclick="openGpsTracker()" style="border-color:var(--accent3);color:var(--accent3)">🗺️<br>GPS<br><span style="font-size:0.65rem;color:var(--muted)">Strecke</span></button>
       </div>
     </div>
     <div class="photo-preview-wrap" style="display:none" id="photoPreviewWrap">
@@ -2163,6 +2351,36 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <input type="hidden" id="completeChallengeId">
     <button class="btn-confirm" onclick="confirmChallengeComplete()">✅ Challenge abschliessen</button>
     <button class="btn-cancel" style="margin-top:8px" onclick="el('completeChallengeModal').style.display='none'">Abbrechen</button>
+  </div>
+</div>
+
+<!-- GPS TRACKER MODAL -->
+<div class="modal-backdrop center" id="gpsModal" style="display:none">
+  <div class="modal-sheet center-modal" style="max-height:95vh">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🗺️ GPS Tracker</div>
+    <div class="modal-sub" id="gpsStatus">Bereit zum Starten</div>
+
+    <!-- Distance display -->
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:3rem;color:var(--accent)" id="gpsDistance">0.00</div>
+      <div style="font-size:0.75rem;color:var(--muted)">Kilometer</div>
+    </div>
+
+    <!-- Route canvas -->
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;margin-bottom:16px;overflow:hidden;position:relative" id="gpsCanvasWrap">
+      <canvas id="gpsCanvas" width="400" height="260" style="width:100%;height:auto;display:block"></canvas>
+      <div id="gpsEmptyMsg" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:0.78rem;color:var(--muted)">Strecke erscheint hier</div>
+    </div>
+
+    <!-- Controls -->
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <button class="btn-confirm" id="gpsStartBtn" onclick="gpsStart()" style="flex:1">▶ Starten</button>
+      <button class="btn-confirm" id="gpsPauseBtn" onclick="gpsPause()" style="flex:1;display:none;background:var(--medium)">⏸ Pause</button>
+      <button class="btn-confirm" id="gpsStopBtn" onclick="gpsStop()" style="flex:1;display:none;background:var(--hard)">⏹ Stopp</button>
+    </div>
+    <button class="btn-confirm" id="gpsUseBtn" onclick="gpsUseAsProof()" style="display:none;background:var(--accent3)">✅ Als Beweis verwenden</button>
+    <button class="btn-cancel" style="margin-top:8px" onclick="gpsCancel()">Abbrechen</button>
   </div>
 </div>
 
