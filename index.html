@@ -911,11 +911,11 @@ async function loadFeed() {
   el('feedList').innerHTML='<div style="text-align:center;padding:30px;color:var(--muted);font-size:0.8rem">Lade Feed...</div>';
   loadPrizeBoxes();
   const today=todayKey();
+  // Simple query — only groupId filter, sort client-side to avoid index
   const q=query(
     collection(db,'completions'),
     where('groupId','==',groupId),
-    where('date','==',today),
-    orderBy('createdAt','desc')
+    where('date','==',today)
   );
   if(feedUnsubscribe) feedUnsubscribe();
   feedUnsubscribe = onSnapshot(q, snap=>{
@@ -923,7 +923,13 @@ async function loadFeed() {
       el('feedList').innerHTML='<div style="text-align:center;padding:30px;color:var(--muted);font-size:0.8rem">Noch niemand hat heute etwas erledigt 👀</div>';
       return;
     }
-    el('feedList').innerHTML=snap.docs.map(d=>{
+    // Sort client-side newest first
+    const docs = snap.docs.slice().sort((a,b)=>{
+      const ta = a.data().createdAt?.seconds||0;
+      const tb = b.data().createdAt?.seconds||0;
+      return tb - ta;
+    });
+    el('feedList').innerHTML=docs.map(d=>{
       const c=d.data();
       const isMe=c.userId===currentUser.uid;
       return `<div class="feed-card" id="feed-${d.id}">
@@ -1923,10 +1929,10 @@ async function loadFitnessTab() {
   // My past runs
   const allMyQ = query(collection(db,'fitness_runs'),
     where('userId','==',currentUser.uid),
-    where('groupId','==',groupId),
-    orderBy('createdAt','desc'));
+    where('groupId','==',groupId));
   const allMySnap = await getDocs(allMyQ);
-  el('fitnessRunList').innerHTML = allMySnap.docs.slice(0,10).map(d => {
+  const sortedRuns = allMySnap.docs.slice().sort((a,b)=>(b.data().createdAt?.seconds||0)-(a.data().createdAt?.seconds||0));
+  el('fitnessRunList').innerHTML = sortedRuns.slice(0,10).map(d => {
     const r = d.data();
     return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:10px;cursor:pointer" onclick="showRunDetail('${d.id}')">
       ${r.photoUrl ? `<img src="${r.photoUrl}" style="width:100%;max-height:160px;object-fit:cover">` : ''}
@@ -2306,9 +2312,9 @@ async function loadCommunityTab() {
   list.innerHTML = '<div style="color:var(--muted);font-size:0.78rem;padding:20px 0">Lade...</div>';
 
   const q = query(collection(db,'community_quests'),
-    where('groupId','==',groupId),
-    orderBy('createdAt','desc'));
+    where('groupId','==',groupId));
   const snap = await getDocs(q);
+  const sortedDocs = snap.docs.slice().sort((a,b)=>(b.data().createdAt?.seconds||0)-(a.data().createdAt?.seconds||0));
 
   if (snap.empty) {
     list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted);font-size:0.8rem">Noch keine Community Quests.<br>Erstell den ersten!</div>';
@@ -2316,7 +2322,7 @@ async function loadCommunityTab() {
   }
 
   const currentWeek = getWeekNumber();
-  list.innerHTML = snap.docs.map(d => {
+  list.innerHTML = sortedDocs.map(d => {
     const q = d.data();
     const isActive = q.activeFromWeek <= currentWeek;
     const isMe = q.createdBy === currentUser.uid;
