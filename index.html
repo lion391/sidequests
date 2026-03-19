@@ -248,8 +248,6 @@ function initMain() {
   checkDuellNotifications();
   fetchWeather && fetchWeather().then && null;
   cleanupOldFeedEntries();
-  const pt = el('profileTrigger');
-  if (pt) pt.onclick = () => window.openProfileModal();
 }
 
 // ── LOCAL PROGRESS ──
@@ -859,76 +857,6 @@ window.confirmComplete = async function() {
   removeCard(completedIndex,'done-anim',checkAllDone);
   pendingIndex = -1;
 };
-
-// ── PROFILE MODAL ──
-window.openProfileModal = async function() {
-  try {
-    el('profileNameInput').value = currentUser.displayName || '';
-    el('profileTotalQuests').textContent = completed.length;
-    el('profileTotalPts').textContent = score;
-    const lvl = getLevel(score);
-    el('profileLevel').textContent = lvl.icon;
-    const letter = (currentUser.displayName || 'Du')[0].toUpperCase();
-    el('profileAvatarLetter').textContent = letter;
-    const banner = localStorage.getItem('sq_profile_banner');
-    if (banner) {
-      el('profileBannerImg').src = banner;
-      el('profileBannerImg').style.display = 'block';
-      el('profileAvatarDefault').style.display = 'none';
-    } else {
-      el('profileBannerImg').style.display = 'none';
-      el('profileAvatarDefault').style.display = 'flex';
-    }
-    el('profileModal').style.display = 'flex';
-  } catch(e) {
-    showToast('Fehler: ' + e.message);
-  }
-};
-
-window.saveProfileName = async function() {
-  const name = el('profileNameInput').value.trim();
-  if (!name) return showToast('Name eingeben');
-  try {
-    await updateProfile(currentUser, { displayName: name });
-    await updateDoc(doc(db,'users',currentUser.uid), { name });
-    el('mainUserName').textContent = name;
-    showToast('✅ Name gespeichert!');
-  } catch(e) { showToast('Fehler beim Speichern'); }
-};
-
-el('bannerInput').onchange = e => {
-  const f = e.target.files[0]; if(!f) return;
-  const r = new FileReader();
-  r.onload = ev => {
-    const data = ev.target.result;
-    localStorage.setItem('sq_profile_banner', data);
-    el('profileBannerImg').src = data;
-    el('profileBannerImg').style.display = 'block';
-    el('profileAvatarDefault').style.display = 'none';
-    showToast('✅ Profilbild gespeichert!');
-  };
-  r.readAsDataURL(f);
-};
-
-// Load banner in leaderboard card
-function getProfileBanner() {
-  return localStorage.getItem('sq_profile_banner') || null;
-}
-async function cleanupOldFeedEntries() {
-  try {
-    const today = todayKey();
-    const lastCleanup = localStorage.getItem('sq_feed_cleanup');
-    if (lastCleanup === today) return; // already cleaned today
-    localStorage.setItem('sq_feed_cleanup', today);
-
-    // Query completions in this group that are NOT from today
-    const q = query(collection(db,'completions'), where('groupId','==',groupId));
-    const snap = await getDocs(q);
-    const toDelete = snap.docs.filter(d => d.data().date !== today);
-    // Delete in batches (silently)
-    await Promise.all(toDelete.map(d => deleteDoc(doc(db,'completions',d.id))));
-  } catch(e) { /* silent */ }
-}
 
 // ── PHOTO LIGHTBOX ──
 window.openPhotoLightbox = function(src) {
@@ -2879,8 +2807,8 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 
   <div class="main-body">
     <!-- Profile / Level row -->
-    <div class="level-display" id="profileTrigger" style="cursor:pointer;margin-bottom:10px">
-      <div class="level-icon" id="mainLevelIcon" style="pointer-events:none">🥚</div>
+    <div class="level-display" style="margin-bottom:10px">
+      <div class="level-icon" id="mainLevelIcon">🥚</div>
       <div class="level-info" style="flex:1;pointer-events:none">
         <div style="display:flex;align-items:center;gap:8px">
           <div class="level-name" id="mainLevelName">Couch-Krieger</div>
@@ -3501,51 +3429,6 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <button class="btn-cancel" style="margin-top:8px" onclick="localStorage.setItem('sq_save_fitness','0');el('fitnessSavePrompt').style.display='none'">
       Nein danke
     </button>
-  </div>
-</div>
-
-<!-- PROFILE MODAL -->
-<div class="modal-backdrop" id="profileModal" style="display:none" onclick="if(event.target===this)this.style.display='none'">
-  <div class="modal-sheet">
-    <div class="modal-handle"></div>
-
-    <!-- Round profile avatar -->
-    <div style="display:flex;justify-content:center;margin-bottom:20px">
-      <div onclick="el('bannerInput').click()" style="cursor:pointer;position:relative;width:90px;height:90px">
-        <div id="profileAvatarDefault" style="width:90px;height:90px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--wild));display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:2rem;color:var(--bg)"><span id="profileAvatarLetter"></span></div>
-        <img id="profileBannerImg" style="position:absolute;inset:0;width:90px;height:90px;border-radius:50%;object-fit:cover;display:none">
-        <div style="position:absolute;bottom:0;right:0;background:var(--surface);border:2px solid var(--border);border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:0.75rem">📷</div>
-      </div>
-    </div>
-    <input type="file" id="bannerInput" accept="image/*" style="display:none">
-
-    <!-- Name edit -->
-    <div style="font-size:0.72rem;color:var(--muted);margin-bottom:6px">Dein Name</div>
-    <div style="display:flex;gap:8px;margin-bottom:16px">
-      <input class="auth-input" id="profileNameInput" type="text" placeholder="Dein Name" style="flex:1;margin:0">
-      <button class="btn-confirm" onclick="saveProfileName()" style="width:auto;padding:10px 16px">✅</button>
-    </div>
-
-    <!-- Stats -->
-    <div style="background:var(--surface2);border-radius:14px;padding:16px;margin-bottom:16px">
-      <div style="font-family:'Syne',sans-serif;font-size:0.7rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:12px">Meine Statistik</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
-        <div style="text-align:center">
-          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.4rem;color:var(--accent)" id="profileTotalQuests">0</div>
-          <div style="font-size:0.65rem;color:var(--muted)">Quests total</div>
-        </div>
-        <div style="text-align:center">
-          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.4rem;color:var(--accent3)" id="profileTotalPts">0</div>
-          <div style="font-size:0.65rem;color:var(--muted)">Punkte total</div>
-        </div>
-        <div style="text-align:center">
-          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.4rem;color:var(--wild)" id="profileLevel">🥚</div>
-          <div style="font-size:0.65rem;color:var(--muted)">Level</div>
-        </div>
-      </div>
-    </div>
-
-    <button class="btn-cancel" onclick="el('profileModal').style.display='none'">Schliessen</button>
   </div>
 </div>
 
