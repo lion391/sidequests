@@ -1450,8 +1450,6 @@ window.guideNext = function() {
   if(guideStep>=9){
     localStorage.setItem('sq_guided','1');
     el('onboarding').style.display='none';
-    // Ask about fitness data saving after onboarding
-    el('fitnessSavePrompt').style.display='flex';
     return;
   }
   document.querySelectorAll('.guide-slide').forEach((s,i)=>s.classList.toggle('active',i===guideStep));
@@ -2572,38 +2570,16 @@ window.showInfoFor = function(tabId) {
   el('infoModalContent').innerHTML = info.content;
   el('infoModal').style.display = 'flex';
 };
-function getFitnessSettingEnabled() {
-  return localStorage.getItem('sq_save_fitness') === '1';
-}
 
-window.toggleSaveFitnessSetting = function(enabled) {
-  localStorage.setItem('sq_save_fitness', enabled ? '1' : '0');
-  showToast(enabled ? '✅ Sportdaten werden lokal gespeichert' : 'Sportdaten werden nicht gespeichert');
-};
-
-function saveRunLocally(km, routeImage, date) {
-  if (!getFitnessSettingEnabled()) return;
-  const runs = getLocalRuns();
-  runs.unshift({ km, routeImage: routeImage || null, date, savedAt: new Date().toISOString() });
-  // Keep max 200 runs
-  localStorage.setItem('sq_local_runs', JSON.stringify(runs.slice(0, 200)));
-}
-
-function getLocalRuns() {
-  try { return JSON.parse(localStorage.getItem('sq_local_runs') || '[]'); } catch(e) { return []; }
-}
 
 // Also save locally when GPS run finishes
 const _origGpsSaveFitness = window.gpsSaveAsFitness;
 window.gpsSaveAsFitness = async function() {
-  saveRunLocally(gpsTotalDistance, buildRouteImage(), todayKey());
   await _origGpsSaveFitness();
 };
 
 // Init settings checkbox state
 function initSettings() {
-  const cb = el('settingsSaveFitness');
-  if (cb) cb.checked = getFitnessSettingEnabled();
 }
 
 window.confirmResetPoints = function() {
@@ -3151,14 +3127,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 
     <div style="font-size:0.72rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Fitness & Sport</div>
 
-    <!-- Save fitness data locally toggle -->
-    <label style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;cursor:pointer">
-      <div>
-        <div style="font-size:0.85rem;font-family:'Syne',sans-serif;font-weight:700">📊 Sportdaten lokal speichern</div>
-        <div style="font-size:0.7rem;color:var(--muted);margin-top:3px">Läufe & Strecken dauerhaft auf diesem Gerät behalten</div>
-      </div>
-      <input type="checkbox" id="settingsSaveFitness" onchange="toggleSaveFitnessSetting(this.checked)" style="width:20px;height:20px;cursor:pointer;flex-shrink:0">
-    </label>
+
 
 
     <div style="font-size:0.72rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Gruppe</div>
@@ -3538,29 +3507,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
   </div>
 </div>
 
-<!-- FITNESS SAVE PROMPT -->
-<div class="modal-backdrop center" id="fitnessSavePrompt" style="display:none">
-  <div class="modal-sheet center-modal">
-    <div style="font-size:2.5rem;text-align:center;margin-bottom:12px">📊</div>
-    <div class="modal-title">Läufe lokal speichern?</div>
-    <div style="font-size:0.82rem;color:var(--muted);line-height:1.8;margin-bottom:24px;text-align:center">
-      Sollen deine Fitness-Läufe dauerhaft auf diesem Gerät gespeichert werden?<br>
-      So kannst du später sehen, wie viel du insgesamt gelaufen bist.
-    </div>
-    <button class="btn-confirm" onclick="localStorage.setItem('sq_save_fitness','1');el('fitnessSavePrompt').style.display='none';showToast('✅ Läufe werden gespeichert!')">
-      ✅ Ja, speichern
-    </button>
-    <button class="btn-cancel" style="margin-top:8px" onclick="localStorage.setItem('sq_save_fitness','0');el('fitnessSavePrompt').style.display='none'">
-      Nein danke
-    </button>
-  </div>
-</div>
 
-<!-- PHOTO LIGHTBOX -->
-<div id="photoLightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:9999;align-items:center;justify-content:center;flex-direction:column" onclick="closeLightbox()">
-  <img id="lightboxImg" style="max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px">
-  <div style="color:rgba(255,255,255,0.4);font-size:0.75rem;margin-top:12px">Tippen zum Schliessen</div>
-</div>
 
 <div class="toast" id="toast"></div>
 </body>
