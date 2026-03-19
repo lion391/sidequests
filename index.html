@@ -213,6 +213,13 @@ async function loadGroup() {
   saveGroupToList(groupId, currentGroup.name, currentGroup.code);
   el('groupCodeDisplay').textContent = currentGroup.code;
   el('groupNameDisplay').textContent = currentGroup.name;
+
+  // Clean up old listeners
+  if (feedUnsubscribe) { feedUnsubscribe(); feedUnsubscribe = null; }
+  if (leaderboardUnsubscribe) { leaderboardUnsubscribe(); leaderboardUnsubscribe = null; }
+  Object.values(reactionsUnsubscribes).forEach(u => u && u());
+  reactionsUnsubscribes = {};
+
   showScreen('screen-main');
   initMain();
 }
@@ -257,9 +264,7 @@ function initMain() {
   if (!localStorage.getItem('sq_guided')) {
     el('onboarding').style.display = 'flex';
   }
-  showTab('quests');
-  listenForTrades();
-  // Restore active quests if any were saved
+  // Reset quest list UI
   if (activeQuests.some(q => q !== null)) {
     const list = el('questList');
     list.innerHTML = '';
@@ -267,7 +272,12 @@ function initMain() {
       if (q) list.insertAdjacentHTML('beforeend', renderQuestCard(q, i));
     });
     el('newQuestBtn').style.display = 'none';
+  } else {
+    el('questList').innerHTML = '<div class="quest-placeholder"><span style="font-size:2rem;display:block;margin-bottom:8px">✨</span>Drück den Knopf — 5 Abenteuer warten!</div>';
+    el('newQuestBtn').style.display = 'flex';
   }
+  showTab('quests');
+  listenForTrades();
 }
 
 // ── LOCAL PROGRESS ──
