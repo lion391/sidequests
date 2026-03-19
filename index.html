@@ -1364,6 +1364,12 @@ const SEASON_EXCLUDE = {
 };
 
 function isQuestSeasonal(q) {
+  // Community quests with explicit season setting
+  if (q.season && q.season !== 'all') {
+    const seasonMap = { spring:'spring', summer:'summer', autumn:'autumn', winter:'winter' };
+    return q.season === getCurrentSeason();
+  }
+  // Auto-detect for built-in quests
   const season = getCurrentSeason();
   const excluded = SEASON_EXCLUDE[season] || [];
   return !excluded.some(kw => q.t.toLowerCase().includes(kw.toLowerCase()) || q.d.toLowerCase().includes(kw.toLowerCase()));
@@ -2204,11 +2210,54 @@ window.selectCqDiff = function(diff, btn) {
   el('cqDiff').value = diff;
 };
 
+const CQ_CATEGORIES = [
+  {name:'Natur',e:'🌿'},{name:'Sport',e:'🏃'},{name:'Sozial',e:'💬'},
+  {name:'Kreativ',e:'🎨'},{name:'Essen',e:'🍳'},{name:'Abenteuer',e:'🗺️'},
+  {name:'Selbstreflexion',e:'📝'},{name:'Gesundheit',e:'💪'},
+  {name:'Musik',e:'🎵'},{name:'Lesen',e:'📖'},{name:'Kochen',e:'👨‍🍳'},
+  {name:'Wandern',e:'🥾'},{name:'Schwimmen',e:'🏊'},{name:'Velo',e:'🚴'},
+  {name:'Laufen',e:'👟'},{name:'Yoga',e:'🧘'},{name:'Meditation',e:'🧠'},
+  {name:'Reisen',e:'✈️'},{name:'Fotografie',e:'📷'},{name:'Schreiben',e:'✍️'},
+  {name:'Freiwillig',e:'🤝'},{name:'Familie',e:'👨‍👩‍👦'},{name:'Freunde',e:'👫'},
+  {name:'Handwerk',e:'🔧'},{name:'Garten',e:'🌱'},{name:'Tiere',e:'🐾'},
+];
+
+function renderCqCatList(filter='') {
+  const list = el('cqCatList');
+  const selected = el('cqCat').value;
+  const filtered = filter
+    ? CQ_CATEGORIES.filter(c => c.name.toLowerCase().includes(filter.toLowerCase()))
+    : CQ_CATEGORIES;
+  list.innerHTML = filtered.map(c => `
+    <button onclick="selectCqCat('${c.name}','${c.e}')" style="padding:6px 10px;background:${selected===c.name?'var(--accent)':'var(--surface2)'};color:${selected===c.name?'var(--bg)':'var(--text)'};border:1px solid ${selected===c.name?'var(--accent)':'var(--border)'};border-radius:100px;font-family:'Space Mono',monospace;font-size:0.7rem;cursor:pointer">
+      ${c.e} ${c.name}
+    </button>`).join('');
+}
+
+window.filterCqCats = function(val) { renderCqCatList(val); };
+
+window.selectCqCat = function(name, emoji) {
+  el('cqCat').value = name;
+  if (!el('cqEmoji').value) el('cqEmoji').value = emoji;
+  el('cqCatSearch').value = '';
+  renderCqCatList();
+};
+
+window.toggleSeason = function(season, btn) {
+  el('cqSeason').value = season;
+  document.querySelectorAll('#cqSeasonBtns .ai-cat-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+};
+
 window.openCreateCommunityQuest = function() {
-  el('cqTitle').value=''; el('cqDesc').value=''; el('cqEmoji').value=''; el('cqCat').value='';
-  el('cqDiff').value=''; el('cqScope').value='group'; el('cqGps').checked=false;
+  el('cqTitle').value=''; el('cqDesc').value=''; el('cqEmoji').value='';
+  el('cqCat').value=''; el('cqCatSearch').value='';
+  el('cqDiff').value=''; el('cqScope').value='group';
+  el('cqSeason').value='all'; el('cqGps').checked=false;
   document.querySelectorAll('#cqDiffBtns .ai-cat-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('#cqSeasonBtns .ai-cat-btn').forEach((b,i)=>b.classList.toggle('active',i===0));
   setCqScope('group');
+  renderCqCatList();
   el('createCommunityQuestModal').style.display='flex';
 };
 
@@ -2242,6 +2291,7 @@ window.submitCommunityQuest = async function() {
 
   const questData = {
     t, d, diff, e, cat, requiresGps, scope,
+    season: el('cqSeason').value || 'all',
     createdBy: currentUser.uid,
     createdByName: currentUser.displayName || 'Anonym',
     groupId, activeFromWeek: nextWeek, activeFromYear: year,
@@ -2330,6 +2380,103 @@ async function getCommunityQuestsForPool() {
       return true;
     });
   } catch(e) { return []; }
+}
+
+// ── FITNESS SETTINGS & LOCAL STORAGE ──
+function getFitnessSettingEnabled() {
+  return localStorage.getItem('sq_save_fitness') === '1';
+}
+
+window.toggleSaveFitnessSetting = function(enabled) {
+  localStorage.setItem('sq_save_fitness', enabled ? '1' : '0');
+  showToast(enabled ? '✅ Sportdaten werden lokal gespeichert' : 'Sportdaten werden nicht gespeichert');
+};
+
+function saveRunLocally(km, routeImage, date) {
+  if (!getFitnessSettingEnabled()) return;
+  const runs = getLocalRuns();
+  runs.unshift({ km, routeImage: routeImage || null, date, savedAt: new Date().toISOString() });
+  // Keep max 200 runs
+  localStorage.setItem('sq_local_runs', JSON.stringify(runs.slice(0, 200)));
+}
+
+function getLocalRuns() {
+  try { return JSON.parse(localStorage.getItem('sq_local_runs') || '[]'); } catch(e) { return []; }
+}
+
+window.openHealthSync = function() {
+  document.getElementById('settingsModal').style.display = 'none';
+  // Load fitness stats
+  const runs = getLocalRuns();
+  const savingEnabled = getFitnessSettingEnabled();
+  if (savingEnabled && runs.length > 0) {
+    el('localFitnessStats').style.display = 'block';
+    const totalKm = runs.reduce((s,r) => s + (r.km||0), 0);
+    const longest = Math.max(...runs.map(r => r.km||0));
+    el('statsTotalKm').textContent = totalKm.toFixed(1);
+    el('statsTotalRuns').textContent = runs.length;
+    el('statsLongestRun').textContent = longest.toFixed(1);
+    el('localRunsList').innerHTML = runs.slice(0,10).map(r => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.75rem">
+        <span style="color:var(--muted)">${r.date}</span>
+        <span style="font-family:'Syne',sans-serif;font-weight:700;color:var(--accent)">${r.km.toFixed(2)} km</span>
+      </div>`).join('');
+  } else {
+    el('localFitnessStats').style.display = 'none';
+  }
+  el('manualKmInput').value = '';
+  el('healthSyncModal').style.display = 'flex';
+};
+
+window.importAppleHealth = async function() {
+  // Use Web Share / Health API if available (only works on iOS Safari with correct permissions)
+  if ('health' in navigator || window.AppleHealthKit) {
+    showToast('Apple Health wird geöffnet...', 2000);
+    // In a real PWA this would use the Health API — for now guide manually
+  }
+  showToast('💡 Tipp: Gib die Distanz von deiner Uhr manuell ein — Apple Health API ist nur in nativen Apps verfügbar');
+};
+
+window.importManualKm = async function() {
+  const km = parseFloat(el('manualKmInput').value);
+  if (!km || km <= 0) return showToast('Gültige Distanz eingeben');
+  const date = todayKey();
+
+  // Save locally if setting enabled
+  saveRunLocally(km, null, date);
+
+  // Award points and save to Firebase
+  const pts = Math.floor(km * 10);
+  score += pts;
+  saveLocalProgress();
+  try {
+    await addDoc(collection(db,'fitness_runs'), {
+      userId: currentUser.uid, userName: currentUser.displayName||'Anonym',
+      groupId, km, pts, photoUrl: null, date,
+      week: getWeekNumber(), year: new Date().getFullYear(),
+      source: 'manual', createdAt: serverTimestamp()
+    });
+    await updateDoc(doc(db,'users',currentUser.uid), { score: increment(pts) });
+  } catch(e) {}
+
+  updateMainUI();
+  el('manualKmInput').value = '';
+  showToast(`✅ ${km.toFixed(2)} km importiert! +${pts} Punkte!`, 3000);
+  // Refresh stats
+  openHealthSync();
+};
+
+// Also save locally when GPS run finishes
+const _origGpsSaveFitness = window.gpsSaveAsFitness;
+window.gpsSaveAsFitness = async function() {
+  saveRunLocally(gpsTotalDistance, buildRouteImage(), todayKey());
+  await _origGpsSaveFitness();
+};
+
+// Init settings checkbox state
+function initSettings() {
+  const cb = el('settingsSaveFitness');
+  if (cb) cb.checked = getFitnessSettingEnabled();
 }
 
 window.confirmResetPoints = function() {
@@ -2652,7 +2799,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <div style="display:flex;align-items:center;gap:10px">
       <div style="font-size:0.72rem;color:var(--muted)" id="mainUserName"></div>
       <div class="score-chip">🏆 <span class="pts" id="mainScore">0</span> <span style="color:var(--muted)">Pts</span></div>
-      <button onclick="document.getElementById('settingsModal').style.display='flex'" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:1rem">⚙️</button>
+      <button onclick="document.getElementById('settingsModal').style.display='flex';initSettings()" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:1rem">⚙️</button>
     </div>
   </div>
 
@@ -2865,6 +3012,20 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <button class="btn-cancel" style="margin-bottom:8px" id="btnLogout">🚪 Ausloggen</button>
     <button class="btn-cancel" style="margin-bottom:20px" onclick="localStorage.removeItem('sq_groupId');showGroupScreen();document.getElementById('settingsModal').style.display='none'">👥 Gruppe wechseln</button>
 
+    <div style="font-size:0.72rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Fitness & Sport</div>
+
+    <!-- Save fitness data locally toggle -->
+    <label style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;cursor:pointer">
+      <div>
+        <div style="font-size:0.85rem;font-family:'Syne',sans-serif;font-weight:700">📊 Sportdaten lokal speichern</div>
+        <div style="font-size:0.7rem;color:var(--muted);margin-top:3px">Läufe & Strecken dauerhaft auf diesem Gerät behalten</div>
+      </div>
+      <input type="checkbox" id="settingsSaveFitness" onchange="toggleSaveFitnessSetting(this.checked)" style="width:20px;height:20px;cursor:pointer;flex-shrink:0">
+    </label>
+
+    <!-- Apple Health / Google Fit sync -->
+    <button class="btn-cancel" style="margin-bottom:20px" onclick="openHealthSync()">⌚ Mit Uhr/Health-App verbinden</button>
+
     <div style="font-size:0.72rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Daten</div>
     <button class="btn-cancel" style="margin-bottom:8px;color:var(--medium);border-color:var(--medium)" onclick="confirmResetPoints()">🔄 Meine Punkte zurücksetzen</button>
     <button class="btn-cancel" style="margin-bottom:20px;color:var(--hard);border-color:var(--hard)" onclick="confirmDeleteGroup()">🗑️ Gruppe löschen</button>
@@ -3039,10 +3200,23 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     </div>
 
     <div style="font-size:0.78rem;color:var(--muted);margin-bottom:6px">Kategorie & Emoji:</div>
-    <div style="display:flex;gap:8px;margin-bottom:14px">
+    <div style="display:flex;gap:8px;margin-bottom:6px">
       <input class="auth-input" id="cqEmoji" type="text" placeholder="🎯" style="width:60px;text-align:center">
-      <input class="auth-input" id="cqCat" type="text" placeholder="Kategorie (z.B. Sozial)" style="flex:1">
+      <input class="auth-input" id="cqCatSearch" type="text" placeholder="Kategorie suchen..." oninput="filterCqCats(this.value)" style="flex:1" autocomplete="off">
     </div>
+    <div id="cqCatList" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+    </div>
+    <input type="hidden" id="cqCat" value="">
+
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px">Jahreszeit:</div>
+    <div style="display:flex;gap:6px;margin-bottom:14px" id="cqSeasonBtns">
+      <button class="ai-cat-btn active" onclick="toggleSeason('all',this)" data-season="all">🌍 Alle</button>
+      <button class="ai-cat-btn" onclick="toggleSeason('spring',this)" data-season="spring">🌸 Frühling</button>
+      <button class="ai-cat-btn" onclick="toggleSeason('summer',this)" data-season="summer">☀️ Sommer</button>
+      <button class="ai-cat-btn" onclick="toggleSeason('autumn',this)" data-season="autumn">🍂 Herbst</button>
+      <button class="ai-cat-btn" onclick="toggleSeason('winter',this)" data-season="winter">❄️ Winter</button>
+    </div>
+    <input type="hidden" id="cqSeason" value="all">
 
     <div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px">Optionen:</div>
     <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
@@ -3069,6 +3243,63 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <input type="hidden" id="cqScope" value="group">
     <button class="btn-confirm" onclick="submitCommunityQuest()">✍️ Quest einreichen</button>
     <button class="btn-cancel" style="margin-top:8px" onclick="el('createCommunityQuestModal').style.display='none'">Abbrechen</button>
+  </div>
+</div>
+
+<!-- HEALTH SYNC MODAL -->
+<div class="modal-backdrop center" id="healthSyncModal" style="display:none" onclick="if(event.target===this)this.style.display='none'">
+  <div class="modal-sheet center-modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">⌚ Uhr & Health verbinden</div>
+    <div style="font-size:0.78rem;color:var(--muted);line-height:1.8;margin-bottom:20px">
+      Du kannst Workouts von deiner Apple Watch, Garmin, Fitbit oder Google Fit importieren — so musst du das Handy nicht mit nehmen.
+    </div>
+
+    <!-- iOS Apple Health -->
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px">
+      <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.9rem;margin-bottom:6px">🍎 Apple Health (iPhone + Apple Watch)</div>
+      <div style="font-size:0.72rem;color:var(--muted);line-height:1.7;margin-bottom:10px">
+        1. Trainiere mit deiner Apple Watch (Laufen, Schwimmen etc.)<br>
+        2. Das Workout wird automatisch in Apple Health gespeichert<br>
+        3. Tippe unten auf "Workout importieren" — die App liest die letzte Aktivität
+      </div>
+      <button class="btn-confirm" onclick="importAppleHealth()" style="font-size:0.8rem;padding:10px">📥 Letztes Workout importieren</button>
+    </div>
+
+    <!-- Android / Garmin -->
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:20px">
+      <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.9rem;margin-bottom:6px">⌚ Garmin / Fitbit / Google Fit</div>
+      <div style="font-size:0.72rem;color:var(--muted);line-height:1.7;margin-bottom:10px">
+        Gib die Distanz deines Workouts manuell ein — überprüfbar über deine Uhr-App.
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="number" id="manualKmInput" placeholder="z.B. 3.5" step="0.01" min="0.1" class="auth-input" style="flex:1;margin:0">
+        <span style="font-size:0.82rem;color:var(--muted)">km</span>
+        <button class="btn-confirm" onclick="importManualKm()" style="width:auto;padding:10px 16px;font-size:0.8rem">✅ Speichern</button>
+      </div>
+    </div>
+
+    <!-- Local fitness history preview -->
+    <div id="localFitnessStats" style="display:none;margin-bottom:16px">
+      <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">📊 Meine Gesamtstatistik</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+        <div style="background:var(--surface2);border-radius:10px;padding:10px;text-align:center">
+          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.2rem;color:var(--accent)" id="statsTotalKm">0</div>
+          <div style="font-size:0.65rem;color:var(--muted)">Total km</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:10px;padding:10px;text-align:center">
+          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.2rem;color:var(--accent3)" id="statsTotalRuns">0</div>
+          <div style="font-size:0.65rem;color:var(--muted)">Läufe</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:10px;padding:10px;text-align:center">
+          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.2rem;color:var(--wild)" id="statsLongestRun">0</div>
+          <div style="font-size:0.65rem;color:var(--muted)">Längster km</div>
+        </div>
+      </div>
+      <div id="localRunsList" style="max-height:200px;overflow-y:auto"></div>
+    </div>
+
+    <button class="btn-cancel" onclick="el('healthSyncModal').style.display='none'">Schliessen</button>
   </div>
 </div>
 
