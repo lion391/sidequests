@@ -65,6 +65,8 @@ function showTab(id) {
 }
 window.showTab = showTab;
 window.showToast = showToast;
+window.el = el;
+window.showGroupScreen = showGroupScreen;
 
 // ── UPLOAD TO CLOUDINARY ──
 async function uploadToCloudinary(dataUrl, folder='proofs') {
@@ -1997,8 +1999,14 @@ async function loadPrizeBoxes() {
   // Leaderboard prize box
   const lbPrize = el('lbPrizeText');
   const lbDays = el('lbDaysLeft');
-  if(lbPrize) lbPrize.textContent = prizeData?.winner || 'Noch kein Preis gewählt';
+  const lbBtn = el('lbProposeBtn');
+  if(lbPrize) lbPrize.textContent = prizeData?.winner
+    ? prizeData.winner
+    : prizeData?.proposals?.length > 0
+    ? `Abstimmung läuft (${Object.keys(prizeData.votes||{}).length} Stimmen)`
+    : 'Noch kein Preis vorgeschlagen';
   if(lbDays) lbDays.textContent = `⏳ Noch ${daysLeft} Tage bis zur Abrechnung`;
+  if(lbBtn) lbBtn.style.display = prizeData?.winner ? 'none' : 'inline-block';
 
   // Feed prize voting box
   const feedBox = el('feedPrizeBox');
@@ -2644,13 +2652,8 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         </div>
       </div>
 
-      <div class="quest-list" id="questList">
-        <div class="quest-placeholder"><span style="font-size:2rem;display:block;margin-bottom:8px">✨</span>Drück den Knopf — 5 Abenteuer warten!</div>
-      </div>
-      <button class="btn-new-quest" id="newQuestBtn" style="display:flex"><span>⚡</span> 5 neue Sidequests</button>
-
       <!-- COMMUNITY QUEST ACCORDION -->
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;margin-top:10px;overflow:hidden">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;margin-bottom:14px;overflow:hidden">
         <button onclick="toggleCommunityAccordion()" style="width:100%;padding:14px 16px;background:transparent;border:none;display:flex;align-items:center;justify-content:space-between;cursor:pointer">
           <span style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.9rem;color:var(--text)">✍️ Eigene Quests erstellen</span>
           <span id="communityChevron" style="font-size:0.8rem;color:var(--muted)">▼</span>
@@ -2660,6 +2663,12 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
           <div style="font-size:0.7rem;color:var(--muted);margin-bottom:10px;line-height:1.5">Dein Quest wird ab nächster Woche zufällig an Gruppenmitglieder verteilt.</div>
           <div id="communityQuestList"></div>
         </div>
+      </div>
+
+      <button class="btn-new-quest" id="newQuestBtn" style="display:flex"><span>⚡</span> 5 neue Sidequests</button>
+
+      <div class="quest-list" id="questList" style="margin-top:10px">
+        <div class="quest-placeholder"><span style="font-size:2rem;display:block;margin-bottom:8px">✨</span>Drück den Knopf — 5 Abenteuer warten!</div>
       </div>
     </div>
 
@@ -2671,10 +2680,11 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 
     <!-- LEADERBOARD TAB -->
     <div class="tab-content" id="tab-leaderboard" style="display:none">
-      <div style="background:var(--surface);border:2px solid var(--accent);border-radius:16px;padding:14px;margin-bottom:14px">
+      <div id="lbPrizeBox" style="background:var(--surface);border:2px solid var(--accent);border-radius:16px;padding:14px;margin-bottom:14px">
         <div style="font-family:'Syne',sans-serif;font-size:0.7rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:6px">🏅 MONATSPREIS</div>
-        <div style="font-size:0.85rem" id="lbPrizeText">Wird geladen...</div>
+        <div style="font-size:0.85rem" id="lbPrizeText">Noch kein Preis vorgeschlagen</div>
         <div style="font-size:0.68rem;color:var(--muted);margin-top:4px" id="lbDaysLeft"></div>
+        <button id="lbProposeBtn" onclick="el('proposePrizeModal').style.display='flex'" style="margin-top:10px;padding:7px 14px;background:transparent;color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-family:'Space Mono',monospace;font-size:0.72rem;cursor:pointer">+ Preis vorschlagen</button>
       </div>
       <div id="leaderboardList"></div>
     </div>
