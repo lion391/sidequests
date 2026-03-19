@@ -2034,20 +2034,36 @@ async function loadFitnessTab() {
     where('userId','==',currentUser.uid),
     where('groupId','==',groupId));
   const allMySnap = await getDocs(allMyQ);
-  const sortedRuns = allMySnap.docs.slice().sort((a,b)=>(b.data().createdAt?.seconds||0)-(a.data().createdAt?.seconds||0));
+
+  // Auto-delete runs older than 7 days
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const toDelete = allMySnap.docs.filter(d => {
+    const secs = d.data().createdAt?.seconds || 0;
+    return secs * 1000 < sevenDaysAgo;
+  });
+  await Promise.all(toDelete.map(d => deleteDoc(doc(db,'fitness_runs',d.id))));
+
+  const sortedRuns = allMySnap.docs
+    .filter(d => !toDelete.find(x => x.id === d.id))
+    .sort((a,b) => (b.data().createdAt?.seconds||0) - (a.data().createdAt?.seconds||0));
+
   el('fitnessRunList').innerHTML = sortedRuns.slice(0,10).map(d => {
     const r = d.data();
-    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:10px;cursor:pointer" onclick="showRunDetail('${d.id}')">
-      ${r.photoUrl ? `<img src="${r.photoUrl}" style="width:100%;max-height:160px;object-fit:cover">` : ''}
-      <div style="padding:12px 14px;display:flex;align-items:center;justify-content:space-between">
-        <div>
-          <div style="font-family:'Syne',sans-serif;font-weight:700">${r.km.toFixed(2)} km</div>
-          <div style="font-size:0.7rem;color:var(--muted)">${r.date}</div>
+    const daysLeft = r.createdAt ? Math.max(0, 7 - Math.floor((Date.now() - r.createdAt.seconds*1000) / 86400000)) : '?';
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:10px">
+      ${r.photoUrl ? `<img src="${r.photoUrl}" style="width:100%;max-height:180px;object-fit:cover;cursor:zoom-in" onclick="openPhotoLightbox('${r.photoUrl}')">` : ''}
+      <div style="padding:12px 14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div>
+            <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1.1rem">${r.km.toFixed(2)} km</div>
+            <div style="font-size:0.7rem;color:var(--muted)">${r.date} · noch ${daysLeft} Tage sichtbar</div>
+          </div>
+          <div style="font-family:'Syne',sans-serif;font-weight:800;color:var(--accent)">+${r.pts} Pts</div>
         </div>
-        <div style="font-family:'Syne',sans-serif;font-weight:800;color:var(--accent)">+${r.pts} Pts</div>
+        ${r.photoUrl ? `<button onclick="downloadRunImage('${r.photoUrl}','${r.date}_${r.km.toFixed(1)}km')" style="width:100%;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;font-family:'Space Mono',monospace;font-size:0.72rem;color:var(--muted);cursor:pointer">⬇️ Strecke als Bild speichern</button>` : ''}
       </div>
     </div>`;
-  }).join('') || '<div style="text-align:center;padding:20px;color:var(--muted);font-size:0.8rem">Noch keine Läufe gespeichert</div>';
+  }).join('') || '<div style="text-align:center;padding:20px;color:var(--muted);font-size:0.8rem">Noch keine Läufe — sie werden nach 7 Tagen automatisch gelöscht</div>';
 
   // Check if bonus already awarded this week
   checkWeeklyFitnessBonus(memberStats);
@@ -2071,8 +2087,21 @@ async function checkWeeklyFitnessBonus(memberStats) {
   showToast('🏆 Wochensieger! +100 Bonuspunkte!', 4000);
 }
 
-window.showRunDetail = function(runId) {
-  // Already visible in the card — could expand later
+window.downloadRunImage = function(url, filename) {
+  // Fetch image and trigger download
+  fetch(url)
+    .then(r => r.blob())
+    .then(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `sidequest_lauf_${filename}.png`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    })
+    .catch(() => {
+      // Fallback: open in new tab
+      window.open(url, '_blank');
+    });
 };
 
 // ── UI TOGGLES ──
