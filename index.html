@@ -209,6 +209,15 @@ function initMain() {
   }
   showTab('quests');
   listenForTrades();
+  // Restore active quests if any were saved
+  if (activeQuests.some(q => q !== null)) {
+    const list = el('questList');
+    list.innerHTML = '';
+    activeQuests.forEach((q, i) => {
+      if (q) list.insertAdjacentHTML('beforeend', renderQuestCard(q, i));
+    });
+    el('newQuestBtn').style.display = 'none';
+  }
 }
 
 // ── LOCAL PROGRESS ──
@@ -216,7 +225,7 @@ let score = 0, completed = [], lastRound = [], activeQuests = [];
 let isLoading = false, pendingIndex = -1, pendingPhotoFront = null, pendingPhotoBack = null;
 
 function saveLocalProgress() {
-  localStorage.setItem('sq_progress', JSON.stringify({ score, completed, lastRound, dailySkips: getDailySkips() }));
+  localStorage.setItem('sq_progress', JSON.stringify({ score, completed, lastRound, dailySkips: getDailySkips(), activeQuests }));
 }
 function loadLocalProgress() {
   try {
@@ -224,6 +233,7 @@ function loadLocalProgress() {
     score = d.score || 0;
     completed = d.completed || [];
     lastRound = d.lastRound || [];
+    activeQuests = d.activeQuests || [];
   } catch(e) {}
 }
 function getDailySkips() {
@@ -594,9 +604,10 @@ window.openProofModal = function(i) {
   el('proofModal').style.display='flex';
 };
 
-window.closeProofModal = function() {
+window.closeProofModal = function(resetIndex=true) {
   el('proofModal').style.display='none';
-  pendingIndex=-1; pendingPhotoFront=null; pendingPhotoBack=null;
+  if(resetIndex) { pendingIndex=-1; }
+  pendingPhotoFront=null; pendingPhotoBack=null;
 };
 
 window.takeNormalPhoto = function() { el('photoInputNormal').click(); };
@@ -726,9 +737,11 @@ window.confirmComplete = async function() {
   updateMainUI();
   showToast(`🎉 +${pts} Punkte!${photoUrl?' 📸':''}`, 2500);
   renderLocalHistory();
-  closeProofModal();
+  const completedIndex = pendingIndex;
+  closeProofModal(false);
   btn.disabled=false; btn.textContent='✅ Abschliessen & Punkte kassieren';
-  removeCard(pendingIndex,'done-anim',checkAllDone);
+  removeCard(completedIndex,'done-anim',checkAllDone);
+  pendingIndex = -1;
 };
 
 // ── LOCAL HISTORY ──
