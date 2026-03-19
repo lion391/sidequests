@@ -216,7 +216,7 @@ let score = 0, completed = [], lastRound = [], activeQuests = [];
 let isLoading = false, pendingIndex = -1, pendingPhotoFront = null, pendingPhotoBack = null;
 
 function saveLocalProgress() {
-  localStorage.setItem('sq_progress', JSON.stringify({ score, completed, lastRound }));
+  localStorage.setItem('sq_progress', JSON.stringify({ score, completed, lastRound, dailySkips: getDailySkips() }));
 }
 function loadLocalProgress() {
   try {
@@ -225,9 +225,6 @@ function loadLocalProgress() {
     completed = d.completed || [];
     lastRound = d.lastRound || [];
   } catch(e) {}
-}
-function saveLocalProgress() {
-  localStorage.setItem('sq_progress', JSON.stringify({ score, completed, lastRound, dailySkips: getDailySkips() }));
 }
 function getDailySkips() {
   try {
