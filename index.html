@@ -567,7 +567,6 @@ let activeQuestIndex = -1;
 function renderQuestCard(q, i) {
   const pts = DIFF_PTS[q.diff];
   const seen = hasPrevHistory(q.t);
-  const gps = isGpsQuest(q) || q.requiresGps; // auto-detect OR creator-flagged
   const isActive = activeQuestIndex === i;
 
   return `<div class="quest-card ${isActive ? 'quest-active' : ''}" id="card-${i}">
@@ -579,7 +578,6 @@ function renderQuestCard(q, i) {
           <span class="diff-badge diff-${q.diff}">${DIFF_DE[q.diff]}</span>
           <span class="pts-inline pts-${q.diff}">+${pts} Pts</span>
           ${seen?`<span class="seen-badge" onclick="showQuestHistory('${q.t.replace(/'/g,"\\'")}')">📂 Verlauf</span>`:''}
-          ${gps?`<span style="font-size:0.6rem;color:var(--accent3);border:1px solid var(--accent3);padding:2px 7px;border-radius:100px">🗺️ GPS</span>`:''}
           ${q.isCommunity&&!q.isGlobal?`<span style="font-size:0.6rem;color:var(--wild);border:1px solid var(--wild);padding:2px 7px;border-radius:100px">✍️ Community</span>`:''}
           ${q.isGlobal?`<span style="font-size:0.6rem;color:var(--accent3);border:1px solid var(--accent3);background:rgba(79,195,247,0.08);padding:2px 7px;border-radius:100px">🌍 Global</span>`:''}
         </div>
@@ -588,8 +586,7 @@ function renderQuestCard(q, i) {
         <div class="quest-cat">${q.e} ${q.cat}</div>
       </div>
     </div>
-    <div class="quest-actions" style="grid-template-columns:${gps ? '1fr 1fr 1fr 1fr' : '1fr 1fr 1fr'}">
-      ${gps ? `<button class="action-btn" onclick="startQuestGps(${i})" style="color:var(--accent);border-right:1px solid var(--border)">▶ Start</button>` : ''}
+    <div class="quest-actions">
       <button class="action-btn btn-done" onclick="openProofModal(${i})" style="border-right:1px solid var(--border)">✅ Fertig</button>
       <button class="action-btn btn-skip" onclick="skipQuest(${i})" style="border-right:1px solid var(--border)">⏭ Skip</button>
       <button class="action-btn" onclick="openTradeModal(${i})" style="color:var(--accent3)">🔄</button>
@@ -1325,7 +1322,13 @@ window.declineTrade = async function() {
 let guideStep=0;
 window.guideNext = function() {
   guideStep++;
-  if(guideStep>=9){localStorage.setItem('sq_guided','1');el('onboarding').style.display='none';return;}
+  if(guideStep>=9){
+    localStorage.setItem('sq_guided','1');
+    el('onboarding').style.display='none';
+    // Ask about fitness data saving after onboarding
+    el('fitnessSavePrompt').style.display='flex';
+    return;
+  }
   document.querySelectorAll('.guide-slide').forEach((s,i)=>s.classList.toggle('active',i===guideStep));
   document.querySelectorAll('.guide-dot').forEach((d,i)=>d.classList.toggle('active',i===guideStep));
   el('guideNextBtn').textContent=guideStep===8?'Loslegen ⚡':'Weiter →';
@@ -2390,8 +2393,6 @@ const INFO_CONTENT = {
       Für jeden gelaufenen Kilometer bekommst du 10 Punkte — unabhängig von den täglichen Quest-Slots.<br><br>
       <b style="color:var(--text)">🏆 Wochensieger</b><br>
       Wer in der Gruppe pro Woche am meisten km läuft, bekommt am Sonntag +100 Bonuspunkte. Nur wenn mindestens jemand gelaufen ist!<br><br>
-      <b style="color:var(--text)">⌚ Uhr / Garmin / Fitbit</b><br>
-      In den Einstellungen kannst du Distanzen manuell eingeben — z.B. nach einem Schwimm-Workout mit der Apple Watch.<br><br>
       <b style="color:var(--text)">📊 Daten lokal speichern</b><br>
       In den Einstellungen kannst du aktivieren, dass alle Läufe dauerhaft auf deinem Gerät gespeichert werden — als persönliche Statistik.`
   }
@@ -2423,68 +2424,6 @@ function saveRunLocally(km, routeImage, date) {
 function getLocalRuns() {
   try { return JSON.parse(localStorage.getItem('sq_local_runs') || '[]'); } catch(e) { return []; }
 }
-
-window.openHealthSync = function() {
-  document.getElementById('settingsModal').style.display = 'none';
-  // Load fitness stats
-  const runs = getLocalRuns();
-  const savingEnabled = getFitnessSettingEnabled();
-  if (savingEnabled && runs.length > 0) {
-    el('localFitnessStats').style.display = 'block';
-    const totalKm = runs.reduce((s,r) => s + (r.km||0), 0);
-    const longest = Math.max(...runs.map(r => r.km||0));
-    el('statsTotalKm').textContent = totalKm.toFixed(1);
-    el('statsTotalRuns').textContent = runs.length;
-    el('statsLongestRun').textContent = longest.toFixed(1);
-    el('localRunsList').innerHTML = runs.slice(0,10).map(r => `
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.75rem">
-        <span style="color:var(--muted)">${r.date}</span>
-        <span style="font-family:'Syne',sans-serif;font-weight:700;color:var(--accent)">${r.km.toFixed(2)} km</span>
-      </div>`).join('');
-  } else {
-    el('localFitnessStats').style.display = 'none';
-  }
-  el('manualKmInput').value = '';
-  el('healthSyncModal').style.display = 'flex';
-};
-
-window.importAppleHealth = async function() {
-  // Use Web Share / Health API if available (only works on iOS Safari with correct permissions)
-  if ('health' in navigator || window.AppleHealthKit) {
-    showToast('Apple Health wird geöffnet...', 2000);
-    // In a real PWA this would use the Health API — for now guide manually
-  }
-  showToast('💡 Tipp: Gib die Distanz von deiner Uhr manuell ein — Apple Health API ist nur in nativen Apps verfügbar');
-};
-
-window.importManualKm = async function() {
-  const km = parseFloat(el('manualKmInput').value);
-  if (!km || km <= 0) return showToast('Gültige Distanz eingeben');
-  const date = todayKey();
-
-  // Save locally if setting enabled
-  saveRunLocally(km, null, date);
-
-  // Award points and save to Firebase
-  const pts = Math.floor(km * 10);
-  score += pts;
-  saveLocalProgress();
-  try {
-    await addDoc(collection(db,'fitness_runs'), {
-      userId: currentUser.uid, userName: currentUser.displayName||'Anonym',
-      groupId, km, pts, photoUrl: null, date,
-      week: getWeekNumber(), year: new Date().getFullYear(),
-      source: 'manual', createdAt: serverTimestamp()
-    });
-    await updateDoc(doc(db,'users',currentUser.uid), { score: increment(pts) });
-  } catch(e) {}
-
-  updateMainUI();
-  el('manualKmInput').value = '';
-  showToast(`✅ ${km.toFixed(2)} km importiert! +${pts} Punkte!`, 3000);
-  // Refresh stats
-  openHealthSync();
-};
 
 // Also save locally when GPS run finishes
 const _origGpsSaveFitness = window.gpsSaveAsFitness;
@@ -2740,7 +2679,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <div class="guide-slide" id="slide-3">
       <div class="guide-emoji">🗺️</div>
       <div class="guide-title">GPS & Fitness</div>
-      <div class="guide-text">Beim Laufen oder Wandern kannst du den GPS-Tracker nutzen — er zeichnet die Strecke als Linie ohne Koordinaten. +10 Pts/km, Wochenrangliste, +100 Bonus für den Wochensieger. Uhr/Garmin: Distanz manuell in Einstellungen eingeben.</div>
+      <div class="guide-text">Beim Laufen oder Wandern kannst du den GPS-Tracker nutzen — er zeichnet die Strecke als Linie ohne Koordinaten. +10 Pts/km, Wochenrangliste, +100 Bonus für den Wochensieger. </div>
     </div>
     <div class="guide-slide" id="slide-4">
       <div class="guide-emoji">⚔️</div>
@@ -3044,8 +2983,6 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       <input type="checkbox" id="settingsSaveFitness" onchange="toggleSaveFitnessSetting(this.checked)" style="width:20px;height:20px;cursor:pointer;flex-shrink:0">
     </label>
 
-    <!-- Apple Health / Google Fit sync -->
-    <button class="btn-cancel" style="margin-bottom:20px" onclick="openHealthSync()">⌚ Mit Uhr/Health-App verbinden</button>
 
     <div style="font-size:0.72rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Daten</div>
     <button class="btn-cancel" style="margin-bottom:8px;color:var(--medium);border-color:var(--medium)" onclick="confirmResetPoints()">🔄 Meine Punkte zurücksetzen</button>
@@ -3267,6 +3204,86 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
   </div>
 </div>
 
+<!-- PROPOSE PRIZE MODAL -->
+<div class="modal-backdrop" id="proposePrizeModal" style="display:none">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🏅 Preis vorschlagen</div>
+    <div class="modal-sub">Was soll der Gewinner bekommen — bzw. was muss der Letzte zahlen?</div>
+    <textarea class="proof-notes" id="prizeProposalText" placeholder='z.B. "Wer verliert zahlt das nächste Abendessen" oder "Gewinner bekommt Kinokarte vom Letzten"' rows="3"></textarea>
+    <button class="btn-confirm" onclick="submitPrizeProposal()">📤 Vorschlag einreichen</button>
+    <button class="btn-cancel" style="margin-top:8px" onclick="el('proposePrizeModal').style.display='none'">Abbrechen</button>
+  </div>
+</div>
+
+<!-- CREATE COMMUNITY QUEST MODAL -->
+<div class="modal-backdrop" id="createCommunityQuestModal" style="display:none">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">✍️ Quest erstellen</div>
+    <div class="modal-sub">Dein Quest wird ab nächster Woche zufällig verteilt.</div>
+
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:6px">Titel (max. 8 Wörter):</div>
+    <input class="auth-input" id="cqTitle" type="text" placeholder="Kurzer, packender Titel" style="margin-bottom:10px">
+
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:6px">Beschreibung:</div>
+    <textarea class="proof-notes" id="cqDesc" placeholder="Was genau muss man tun? Konkret und motivierend." rows="3"></textarea>
+
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px">Schwierigkeit:</div>
+    <div style="display:flex;gap:8px;margin-bottom:14px" id="cqDiffBtns">
+      <button class="ai-cat-btn" onclick="selectCqDiff('easy',this)">🟢 Leicht<br><span style="font-size:0.65rem">+10 Pts</span></button>
+      <button class="ai-cat-btn" onclick="selectCqDiff('medium',this)">🟡 Mittel<br><span style="font-size:0.65rem">+25 Pts</span></button>
+      <button class="ai-cat-btn" onclick="selectCqDiff('hard',this)">🔴 Schwer<br><span style="font-size:0.65rem">+50 Pts</span></button>
+      <button class="ai-cat-btn" onclick="selectCqDiff('wild',this)">🔥 Wild<br><span style="font-size:0.65rem">+75 Pts</span></button>
+    </div>
+
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:6px">Kategorie & Emoji:</div>
+    <div style="display:flex;gap:8px;margin-bottom:6px">
+      <input class="auth-input" id="cqEmoji" type="text" placeholder="🎯" style="width:60px;text-align:center">
+      <input class="auth-input" id="cqCatSearch" type="text" placeholder="Kategorie suchen..." oninput="filterCqCats(this.value)" style="flex:1" autocomplete="off">
+    </div>
+    <div id="cqCatList" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+    </div>
+    <input type="hidden" id="cqCat" value="">
+
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px">Jahreszeit:</div>
+    <div style="display:flex;gap:6px;margin-bottom:14px" id="cqSeasonBtns">
+      <button class="ai-cat-btn active" onclick="toggleSeason('all',this)" data-season="all">🌍 Alle</button>
+      <button class="ai-cat-btn" onclick="toggleSeason('spring',this)" data-season="spring">🌸 Frühling</button>
+      <button class="ai-cat-btn" onclick="toggleSeason('summer',this)" data-season="summer">☀️ Sommer</button>
+      <button class="ai-cat-btn" onclick="toggleSeason('autumn',this)" data-season="autumn">🍂 Herbst</button>
+      <button class="ai-cat-btn" onclick="toggleSeason('winter',this)" data-season="winter">❄️ Winter</button>
+    </div>
+    <input type="hidden" id="cqSeason" value="all">
+
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px">Optionen:</div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
+      <!-- GPS toggle -->
+      <label style="display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;cursor:pointer">
+        <input type="checkbox" id="cqGps" style="width:18px;height:18px;cursor:pointer">
+        <div>
+          <div style="font-size:0.82rem;font-family:'Syne',sans-serif;font-weight:700">🗺️ GPS-Quest</div>
+          <div style="font-size:0.7rem;color:var(--muted)">Person muss GPS-Tracker nutzen (z.B. "Lauf ein Herz")</div>
+        </div>
+      </label>
+      <!-- Sichtbarkeit toggle -->
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px">
+        <div style="font-size:0.82rem;font-family:'Syne',sans-serif;font-weight:700;margin-bottom:8px">🌍 Sichtbarkeit</div>
+        <div style="display:flex;gap:8px">
+          <button id="cqScopeGroup" onclick="setCqScope('group',this)" style="flex:1;padding:8px;background:var(--accent);color:var(--bg);border:none;border-radius:8px;font-family:'Syne',sans-serif;font-weight:700;font-size:0.75rem;cursor:pointer">👥 Nur Gruppe</button>
+          <button id="cqScopeGlobal" onclick="setCqScope('global',this)" style="flex:1;padding:8px;background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:8px;font-family:'Syne',sans-serif;font-weight:700;font-size:0.75rem;cursor:pointer">🌍 Global</button>
+        </div>
+        <div style="font-size:0.68rem;color:var(--muted);margin-top:6px" id="cqScopeDesc">Nur Mitglieder deiner Gruppe sehen diesen Quest.</div>
+      </div>
+    </div>
+
+    <input type="hidden" id="cqDiff" value="">
+    <input type="hidden" id="cqScope" value="group">
+    <button class="btn-confirm" onclick="submitCommunityQuest()">✍️ Quest einreichen</button>
+    <button class="btn-cancel" style="margin-top:8px" onclick="el('createCommunityQuestModal').style.display='none'">Abbrechen</button>
+  </div>
+</div>
+
 <!-- HEALTH SYNC MODAL -->
 <div class="modal-backdrop center" id="healthSyncModal" style="display:none" onclick="if(event.target===this)this.style.display='none'">
   <div class="modal-sheet center-modal">
@@ -3331,6 +3348,24 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <div class="modal-title" id="infoModalTitle">ℹ️ Info</div>
     <div id="infoModalContent" style="font-size:0.82rem;color:var(--muted);line-height:1.9"></div>
     <button class="btn-cancel" style="margin-top:20px" onclick="el('infoModal').style.display='none'">Verstanden</button>
+  </div>
+</div>
+
+<!-- FITNESS SAVE PROMPT -->
+<div class="modal-backdrop center" id="fitnessSavePrompt" style="display:none">
+  <div class="modal-sheet center-modal">
+    <div style="font-size:2.5rem;text-align:center;margin-bottom:12px">📊</div>
+    <div class="modal-title">Läufe lokal speichern?</div>
+    <div style="font-size:0.82rem;color:var(--muted);line-height:1.8;margin-bottom:24px;text-align:center">
+      Sollen deine Fitness-Läufe dauerhaft auf diesem Gerät gespeichert werden?<br>
+      So kannst du später sehen, wie viel du insgesamt gelaufen bist.
+    </div>
+    <button class="btn-confirm" onclick="localStorage.setItem('sq_save_fitness','1');el('fitnessSavePrompt').style.display='none';showToast('✅ Läufe werden gespeichert!')">
+      ✅ Ja, speichern
+    </button>
+    <button class="btn-cancel" style="margin-top:8px" onclick="localStorage.setItem('sq_save_fitness','0');el('fitnessSavePrompt').style.display='none'">
+      Nein danke
+    </button>
   </div>
 </div>
 
