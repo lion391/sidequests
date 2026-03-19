@@ -61,6 +61,7 @@ function showTab(id) {
   el('tabBtn-' + id).classList.add('active');
   if (id === 'feed') loadFeed();
   if (id === 'leaderboard') loadLeaderboard();
+  if (id === 'challenges') loadChallengesTab();
 }
 window.showTab = showTab;
 window.showToast = showToast;
@@ -278,6 +279,8 @@ function initMain() {
   }
   showTab('quests');
   listenForTrades();
+  listenForChallenges();
+  loadWeekQuest();
 }
 
 // ── LOCAL PROGRESS ──
@@ -544,8 +547,10 @@ function shuffle(arr) {
 
 function pickQuests() {
   const used = new Set([...lastRound, ...completed.slice(0,20).map(q=>q.title)]);
-  let pool = ALL_QUESTS.filter(q=>!used.has(q.t));
-  if(pool.length < 5) pool = shuffle(ALL_QUESTS); else pool = shuffle(pool);
+  let pool = ALL_QUESTS.filter(q => !used.has(q.t) && isQuestSeasonal(q));
+  if(pool.length < 5) pool = ALL_QUESTS.filter(q => isQuestSeasonal(q));
+  if(pool.length < 5) pool = [...ALL_QUESTS];
+  pool = shuffle(pool);
   const result=[];
   const plan = shuffle(['easy','easy','medium','medium','hard']);
   for(const diff of plan){
@@ -1282,7 +1287,307 @@ window.guideNext = function() {
   el('guideNextBtn').textContent=guideStep===4?'Loslegen ⚡':'Weiter →';
 };
 
-// ── RESET & DELETE ──
+// ── SEASONAL QUEST FILTERING ──
+function getCurrentSeason() {
+  const m = new Date().getMonth() + 1; // 1-12
+  if (m >= 3 && m <= 5) return 'spring';
+  if (m >= 6 && m <= 8) return 'summer';
+  if (m >= 9 && m <= 11) return 'autumn';
+  return 'winter';
+}
+
+// Tags that are bad in winter/cold seasons
+const SEASON_EXCLUDE = {
+  winter: ['Kanu','SUP','schwimmen im See','Schwimmen','Fahr Kanu','Velo','Velotour','Fahrrad','Baden','Grillen','Picknick im Freien'],
+  spring: [],
+  summer: [],
+  autumn: ['Kanu','SUP','schwimmen im See'],
+};
+
+function isQuestSeasonal(q) {
+  const season = getCurrentSeason();
+  const excluded = SEASON_EXCLUDE[season] || [];
+  return !excluded.some(kw => q.t.toLowerCase().includes(kw.toLowerCase()) || q.d.toLowerCase().includes(kw.toLowerCase()));
+}
+
+// ── WEEK QUEST ──
+const WEEK_QUESTS = [
+  {t:'Triff 3 Freunde persönlich',d:'Triff diese Woche 3 verschiedene Personen in echt — kein Chat, kein Anruf. Kaffee, Spaziergang, Essen, egal.',pts:150,e:'👥'},
+  {t:'7 Tage täglich Sport',d:'Beweg dich jeden Tag dieser Woche mindestens 20 Minuten. Laufen, Velo, Schwimmen, Yoga — alles zählt.',pts:200,e:'🏃'},
+  {t:'Koche jeden Abend selbst',d:'Kein Restaurant, kein Take-Away diese Woche. Jeden Abend selbst kochen — auch einfache Sachen zählen.',pts:150,e:'🍳'},
+  {t:'Täglich 30 Min ohne Handy in der Natur',d:'Geh diese Woche jeden Tag mindestens 30 Minuten raus — ohne Handy in der Hand. Einfach draussen sein.',pts:175,e:'🌿'},
+  {t:'Schreib jeden Tag einen Tagebucheintrag',d:'Jeden Tag dieser Woche mindestens 10 Minuten schreiben — was dich beschäftigt, was schön war, was du willst.',pts:125,e:'📓'},
+  {t:'Mach jemandem jeden Tag eine Freude',d:'Jeden Tag dieser Woche etwas Nettes für jemanden tun — gross oder klein. 7 Tage, 7 Gesten.',pts:175,e:'❤️'},
+  {t:'Lern diese Woche etwas Neues täglich',d:'Jeden Tag 20 Minuten etwas lernen — Sprache, Instrument, Kochen, Handwerk. Dasselbe Thema die ganze Woche.',pts:150,e:'🎓'},
+  {t:'Eine Woche früh aufstehen',d:'Jeden Tag diese Woche eine Stunde früher als üblich aufstehen. Nutz die Morgenstunden bewusst.',pts:175,e:'🌄'},
+  {t:'Diese Woche kein Social Media',d:'7 Tage ohne Instagram, TikTok, Twitter/X. Nachrichten über WhatsApp sind okay. Schau wie du dich fühlst.',pts:200,e:'📵'},
+  {t:'Besuche jeden Tag einen anderen Ort',d:'Geh diese Woche jeden Tag an einen Ort den du noch nicht oder lange nicht besucht hast.',pts:150,e:'🗺️'},
+];
+
+function getWeekNumber() {
+  const d = new Date();
+  d.setHours(0,0,0,0);
+  d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+  const week1 = new Date(d.getFullYear(), 0, 4);
+  return 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+}
+
+function getWeekQuestForGroup() {
+  const week = getWeekNumber();
+  const year = new Date().getFullYear();
+  // Use group ID + week + year as seed for consistent quest per group per week
+  const seed = (groupId || '').split('').reduce((a,c) => a + c.charCodeAt(0), 0) + week + year;
+  return WEEK_QUESTS[seed % WEEK_QUESTS.length];
+}
+
+function daysLeftInWeek() {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun,1=Mon,...6=Sat
+  const daysUntilSunday = day === 0 ? 0 : 7 - day;
+  return daysUntilSunday;
+}
+
+function weekQuestKey() {
+  return `sq_weekquest_${getWeekNumber()}_${new Date().getFullYear()}`;
+}
+
+async function loadWeekQuest() {
+  const wq = getWeekQuestForGroup();
+  const done = localStorage.getItem(weekQuestKey()) === 'done';
+  const box = el('weekQuestBox');
+  box.style.display = 'block';
+  el('weekQuestTitle').textContent = wq.e + ' ' + wq.t;
+  el('weekQuestDesc').textContent = wq.d;
+  el('weekQuestPts').textContent = '+' + wq.pts + ' Pts';
+  el('weekQuestDaysLeft').textContent = done ? '✅ Erledigt!' : daysLeftInWeek() + ' Tage noch';
+  el('weekQuestBtn').style.display = done ? 'none' : 'block';
+  if(done) box.style.borderColor = 'var(--accent)';
+}
+
+window.completeWeekQuest = async function() {
+  const wq = getWeekQuestForGroup();
+  if(localStorage.getItem(weekQuestKey()) === 'done') return;
+  localStorage.setItem(weekQuestKey(), 'done');
+  score += wq.pts;
+  saveLocalProgress();
+  try {
+    await updateDoc(doc(db,'users',currentUser.uid), { score: increment(wq.pts) });
+    await addDoc(collection(db,'completions'), {
+      userId: currentUser.uid, userName: currentUser.displayName||'Anonym',
+      groupId, questTitle: '🌟 ' + wq.t, questEmoji: wq.e,
+      questDiff: 'wild', pts: wq.pts, notes: 'Wochenquest erledigt!',
+      photoUrl: null, date: todayKey(), createdAt: serverTimestamp()
+    });
+  } catch(e) { console.error(e); }
+  updateMainUI();
+  loadWeekQuest();
+  showToast(`🌟 Wochenquest erledigt! +${wq.pts} Punkte!`, 3000);
+};
+
+// ── CHALLENGES ──
+window.openCreateChallenge = async function() {
+  el('challengeDesc').value = '';
+  el('challengePts').value = '';
+  el('challengeTargetUid').value = '';
+  el('challengeTargetName').value = '';
+  el('challengeTargetList').innerHTML = '<div style="color:var(--muted);font-size:0.78rem">Lade Mitglieder...</div>';
+  el('createChallengeModal').style.display = 'flex';
+
+  const gDoc = await getDoc(doc(db,'groups',groupId));
+  const members = (gDoc.data().members || []).filter(uid => uid !== currentUser.uid);
+  if(!members.length) {
+    el('challengeTargetList').innerHTML = '<div style="color:var(--muted);font-size:0.78rem">Keine anderen Mitglieder</div>';
+    return;
+  }
+  let html = '';
+  for(const uid of members) {
+    const uDoc = await getDoc(doc(db,'users',uid));
+    if(!uDoc.exists()) continue;
+    const u = uDoc.data();
+    html += `<button class="trade-member-btn" onclick="selectChallengeTarget('${uid}','${(u.name||'Anonym').replace(/'/g,"\\'")}',this)">
+      <div class="feed-avatar" style="width:32px;height:32px;font-size:0.85rem">${(u.name||'?')[0].toUpperCase()}</div>
+      ${u.name||'Anonym'}
+    </button>`;
+  }
+  el('challengeTargetList').innerHTML = html;
+};
+
+window.selectChallengeTarget = function(uid, name, btn) {
+  document.querySelectorAll('#challengeTargetList .trade-member-btn').forEach(b => b.style.borderColor = 'var(--border)');
+  btn.style.borderColor = 'var(--accent2)';
+  el('challengeTargetUid').value = uid;
+  el('challengeTargetName').value = name;
+};
+
+window.sendChallenge = async function() {
+  const desc = el('challengeDesc').value.trim();
+  const pts = parseInt(el('challengePts').value);
+  const targetUid = el('challengeTargetUid').value;
+  const targetName = el('challengeTargetName').value;
+  if(!desc) return showToast('Beschreibung eingeben');
+  if(!pts || pts < 10 || pts > 500) return showToast('Punkte zwischen 10 und 500');
+  if(!targetUid) return showToast('Person auswählen');
+
+  await addDoc(collection(db,'challenges'), {
+    fromUid: currentUser.uid,
+    fromName: currentUser.displayName || 'Anonym',
+    toUid: targetUid,
+    toName: targetName,
+    groupId,
+    desc,
+    pts,
+    status: 'pending', // pending, accepted, completed, failed, declined
+    createdAt: serverTimestamp(),
+    deadline: new Date(Date.now() + 30*24*60*60*1000).toISOString(),
+  });
+  el('createChallengeModal').style.display = 'none';
+  showToast(`⚔️ Challenge an ${targetName} gesendet!`);
+};
+
+function listenForChallenges() {
+  // Listen for incoming challenges
+  const q = query(collection(db,'challenges'), where('toUid','==',currentUser.uid), where('status','==','pending'));
+  onSnapshot(q, snap => {
+    snap.docChanges().forEach(change => {
+      if(change.type === 'added') {
+        const c = change.doc.data();
+        el('incomingChallengeFrom').textContent = `${c.fromName} fordert dich heraus!`;
+        el('incomingChallengeContent').innerHTML = `
+          <div style="font-size:0.8rem;line-height:1.7;margin-bottom:10px">${c.desc}</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span style="font-family:'Syne',sans-serif;font-weight:800;color:var(--accent2)">⚔️ ${c.pts} Pts</span>
+            <span style="font-size:0.7rem;color:var(--muted)">1 Monat Zeit</span>
+          </div>`;
+        el('incomingChallengeId').value = change.doc.id;
+        el('incomingChallengeModal').style.display = 'flex';
+      }
+    });
+  });
+}
+
+window.acceptChallenge = async function() {
+  const id = el('incomingChallengeId').value;
+  await updateDoc(doc(db,'challenges',id), { status: 'accepted' });
+  el('incomingChallengeModal').style.display = 'none';
+  showToast('⚔️ Challenge angenommen! Du hast 1 Monat.');
+  loadChallengesTab();
+};
+
+window.declineChallenge = async function() {
+  const id = el('incomingChallengeId').value;
+  await updateDoc(doc(db,'challenges',id), { status: 'declined' });
+  el('incomingChallengeModal').style.display = 'none';
+  showToast('Challenge abgelehnt.');
+};
+
+async function loadChallengesTab() {
+  const list = el('challengesList');
+  list.innerHTML = '<div style="color:var(--muted);font-size:0.78rem;padding:20px 0">Lade Challenges...</div>';
+
+  // Load challenges involving current user
+  const [sentSnap, receivedSnap] = await Promise.all([
+    getDocs(query(collection(db,'challenges'), where('fromUid','==',currentUser.uid), where('groupId','==',groupId))),
+    getDocs(query(collection(db,'challenges'), where('toUid','==',currentUser.uid), where('groupId','==',groupId))),
+  ]);
+
+  const all = [...sentSnap.docs, ...receivedSnap.docs]
+    .map(d => ({id:d.id,...d.data()}))
+    .filter((c,i,a) => a.findIndex(x=>x.id===c.id)===i) // dedupe
+    .sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
+
+  if(!all.length) {
+    list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted);font-size:0.8rem">Noch keine Challenges.<br>Fordere jemanden heraus!</div>';
+    return;
+  }
+
+  const statusLabel = {pending:'⏳ Ausstehend',accepted:'🔥 Läuft',completed:'✅ Erledigt',failed:'❌ Gescheitert',declined:'🚫 Abgelehnt'};
+  const statusColor = {pending:'var(--muted)',accepted:'var(--accent2)',completed:'var(--easy)',failed:'var(--hard)',declined:'var(--muted)'};
+
+  list.innerHTML = all.map(c => {
+    const isReceiver = c.toUid === currentUser.uid;
+    const deadline = c.deadline ? new Date(c.deadline).toLocaleDateString('de-CH') : '–';
+    const daysLeft = c.deadline ? Math.max(0, Math.ceil((new Date(c.deadline)-Date.now())/86400000)) : 0;
+    const canComplete = isReceiver && c.status === 'accepted';
+    const canMarkFailed = !isReceiver && c.status === 'accepted' && daysLeft === 0;
+
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span style="font-size:0.7rem;font-weight:700;color:${statusColor[c.status]}">${statusLabel[c.status]||c.status}</span>
+        <span style="font-family:'Syne',sans-serif;font-weight:800;color:var(--accent2)">⚔️ ${c.pts} Pts</span>
+      </div>
+      <div style="font-size:0.82rem;line-height:1.6;margin-bottom:8px">${c.desc}</div>
+      <div style="font-size:0.7rem;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+        <span>${isReceiver ? '👤 Von: '+c.fromName : '🎯 Für: '+c.toName}</span>
+        ${c.status==='accepted'?`<span>⏰ ${daysLeft} Tage noch (bis ${deadline})</span>`:''}
+      </div>
+      ${canComplete ? `<button class="btn-confirm" style="font-size:0.8rem;padding:8px 14px;width:auto" onclick="openCompleteChallenge('${c.id}','${c.desc.replace(/'/g,"\\'").replace(/"/g,'\\"')}')">✅ Abschliessen</button>` : ''}
+      ${canMarkFailed ? `<button class="btn-confirm" style="font-size:0.8rem;padding:8px 14px;width:auto;background:var(--hard)" onclick="markChallengeFailed('${c.id}')">❌ Zeit abgelaufen</button>` : ''}
+    </div>`;
+  }).join('');
+}
+
+window.openCompleteChallenge = function(id, desc) {
+  el('completeChallengeId').value = id;
+  el('completeChallengeDesc').textContent = desc;
+  el('challengeCompleteNotes').value = '';
+  el('challengePhotoArea').innerHTML = '<span style="font-size:2rem">📸</span><div style="font-size:0.78rem;color:var(--muted)">Beweisfoto (optional)</div>';
+  el('completeChallengeModal').style.display = 'flex';
+};
+
+let challengeProofPhoto = null;
+window.handleChallengePhoto = function(e) {
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    challengeProofPhoto = ev.target.result;
+    el('challengePhotoArea').innerHTML = `<img src="${challengeProofPhoto}" style="width:100%;border-radius:12px;max-height:200px;object-fit:cover">`;
+  };
+  r.readAsDataURL(f);
+};
+
+window.confirmChallengeComplete = async function() {
+  const id = el('completeChallengeId').value;
+  const notes = el('challengeCompleteNotes').value.trim();
+  const cDoc = await getDoc(doc(db,'challenges',id));
+  if(!cDoc.exists()) return;
+  const c = cDoc.data();
+
+  let photoUrl = null;
+  if(challengeProofPhoto) {
+    try { photoUrl = await uploadToCloudinary(challengeProofPhoto,'challenges'); } catch(e) {}
+  }
+
+  // Update challenge
+  await updateDoc(doc(db,'challenges',id), { status:'completed', completedAt: serverTimestamp(), notes, photoUrl });
+
+  // Transfer points: add to receiver, deduct from sender
+  await updateDoc(doc(db,'users',currentUser.uid), { score: increment(c.pts) });
+  await updateDoc(doc(db,'users',c.fromUid), { score: increment(-c.pts) });
+
+  // Update local score if current user
+  score += c.pts;
+  saveLocalProgress();
+
+  el('completeChallengeModal').style.display = 'none';
+  updateMainUI();
+  loadChallengesTab();
+  showToast(`🏆 Challenge geschafft! +${c.pts} Punkte!`, 3000);
+};
+
+window.markChallengeFailed = async function(id) {
+  const cDoc = await getDoc(doc(db,'challenges',id));
+  if(!cDoc.exists()) return;
+  const c = cDoc.data();
+  await updateDoc(doc(db,'challenges',id), { status:'failed' });
+  // Transfer points: deduct from receiver, add to sender
+  await updateDoc(doc(db,'users',c.toUid), { score: increment(-c.pts) });
+  await updateDoc(doc(db,'users',currentUser.uid), { score: increment(c.pts) });
+  score += c.pts;
+  saveLocalProgress();
+  updateMainUI();
+  loadChallengesTab();
+  showToast(`⚔️ Challenge gescheitert — +${c.pts} Punkte für dich!`);
+};
 window.confirmResetPoints = function() {
   el('settingsModal').style.display = 'none';
   el('confirmResetModal').style.display = 'flex';
@@ -1368,8 +1673,8 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent3));border-radius:10px;transition:width 0.6s cubic-bezier(0.34,1.56,0.64,1);}
 
 /* TABS */
-.tab-bar{display:flex;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:4px;margin-bottom:14px;gap:4px;}
-.tab-btn{flex:1;padding:8px;border:none;background:transparent;color:var(--muted);font-family:'Space Mono',monospace;font-size:0.72rem;cursor:pointer;border-radius:10px;transition:all 0.2s;}
+.tab-bar{display:flex;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:4px;margin-bottom:14px;gap:3px;overflow-x:auto;}
+.tab-btn{flex:1;min-width:0;padding:7px 6px;border:none;background:transparent;color:var(--muted);font-family:'Space Mono',monospace;font-size:0.65rem;cursor:pointer;border-radius:10px;transition:all 0.2s;white-space:nowrap;}
 .tab-btn.active{background:var(--accent);color:var(--bg);font-weight:700;}
 
 /* QUEST CARDS */
@@ -1626,15 +1931,37 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       <button class="tab-btn active" id="tabBtn-quests" onclick="showTab('quests')">⚡ Quests</button>
       <button class="tab-btn" id="tabBtn-feed" onclick="showTab('feed')">👥 Feed</button>
       <button class="tab-btn" id="tabBtn-leaderboard" onclick="showTab('leaderboard')">🏆 Rangliste</button>
+      <button class="tab-btn" id="tabBtn-challenges" onclick="showTab('challenges')">⚔️ Challenges</button>
       <button class="tab-btn" id="tabBtn-history" onclick="showTab('history')">📜 Historie</button>
     </div>
 
     <!-- QUESTS TAB -->
     <div class="tab-content" id="tab-quests">
+      <!-- WOCHENQUEST -->
+      <div id="weekQuestBox" style="display:none;background:var(--surface);border:2px solid var(--wild);border-radius:18px;padding:16px;margin-bottom:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:0.8rem;color:var(--wild)">🌟 WOCHENQUEST</span>
+          <span style="font-size:0.7rem;color:var(--muted)" id="weekQuestDaysLeft"></span>
+        </div>
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;margin-bottom:4px" id="weekQuestTitle"></div>
+        <div style="font-size:0.75rem;color:var(--muted);line-height:1.5;margin-bottom:12px" id="weekQuestDesc"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-family:'Syne',sans-serif;font-weight:800;color:var(--wild)" id="weekQuestPts"></span>
+          <button id="weekQuestBtn" class="btn-confirm" style="width:auto;padding:8px 16px;font-size:0.8rem" onclick="completeWeekQuest()">✅ Erledigt!</button>
+        </div>
+      </div>
+
       <div class="quest-list" id="questList">
         <div class="quest-placeholder"><span style="font-size:2rem;display:block;margin-bottom:8px">✨</span>Drück den Knopf — 5 Abenteuer warten!</div>
       </div>
       <button class="btn-new-quest" id="newQuestBtn" style="display:flex"><span>⚡</span> 5 neue Sidequests</button>
+    </div>
+
+    <!-- CHALLENGES TAB -->
+    <div class="tab-content" id="tab-challenges" style="display:none">
+      <button class="btn-new-quest" onclick="openCreateChallenge()" style="margin-bottom:14px;background:var(--surface);color:var(--accent2);border:1px solid var(--accent2)">⚔️ Challenge erstellen</button>
+      <div style="font-family:'Syne',sans-serif;font-size:0.75rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Aktive Challenges</div>
+      <div id="challengesList"></div>
     </div>
 
     <!-- FEED TAB -->
@@ -1785,6 +2112,56 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <input type="hidden" id="incomingTradeId">
     <button class="btn-confirm" onclick="acceptTrade()">✅ Annehmen</button>
     <button class="btn-cancel" style="margin-top:8px" onclick="declineTrade()">Ablehnen</button>
+  </div>
+</div>
+
+<!-- CREATE CHALLENGE MODAL -->
+<div class="modal-backdrop" id="createChallengeModal" style="display:none">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">⚔️ Challenge erstellen</div>
+    <div class="modal-sub">Die andere Person hat 1 Monat Zeit. Gelingt sie, bekommt sie deine Punkte — scheitert sie, bekommst du ihre.</div>
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:6px">Challenge-Beschreibung:</div>
+    <textarea class="proof-notes" id="challengeDesc" placeholder="Was muss die Person tun? Sei konkret und fair." rows="3"></textarea>
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:6px">Punkteinsatz:</div>
+    <input class="auth-input" id="challengePts" type="number" min="10" max="500" placeholder="z.B. 100" style="margin-bottom:14px">
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px">Für wen:</div>
+    <div id="challengeTargetList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
+    <input type="hidden" id="challengeTargetUid">
+    <input type="hidden" id="challengeTargetName">
+    <button class="btn-confirm" onclick="sendChallenge()">⚔️ Challenge senden</button>
+    <button class="btn-cancel" style="margin-top:8px" onclick="el('createChallengeModal').style.display='none'">Abbrechen</button>
+  </div>
+</div>
+
+<!-- INCOMING CHALLENGE MODAL -->
+<div class="modal-backdrop center" id="incomingChallengeModal" style="display:none">
+  <div class="modal-sheet center-modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">⚔️ Challenge erhalten!</div>
+    <div class="modal-sub" id="incomingChallengeFrom"></div>
+    <div id="incomingChallengeContent" style="background:var(--surface2);border:1px solid var(--accent2);border-radius:14px;padding:14px;margin-bottom:16px"></div>
+    <input type="hidden" id="incomingChallengeId">
+    <button class="btn-confirm" style="background:var(--accent2);margin-bottom:8px" onclick="acceptChallenge()">⚔️ Annehmen</button>
+    <button class="btn-cancel" onclick="declineChallenge()">Ablehnen</button>
+  </div>
+</div>
+
+<!-- COMPLETE CHALLENGE MODAL -->
+<div class="modal-backdrop" id="completeChallengeModal" style="display:none">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">✅ Challenge abschliessen</div>
+    <div class="modal-sub" id="completeChallengeDesc"></div>
+    <div class="proof-photo-area" id="challengePhotoArea" onclick="el('challengePhotoInput').click()" style="border:2px dashed var(--border);border-radius:14px;padding:30px;text-align:center;cursor:pointer;margin-bottom:12px;min-height:120px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px">
+      <span style="font-size:2rem">📸</span>
+      <div style="font-size:0.78rem;color:var(--muted)">Beweisfoto (optional)</div>
+    </div>
+    <input type="file" id="challengePhotoInput" accept="image/*" capture="environment" style="display:none" onchange="handleChallengePhoto(event)">
+    <textarea class="proof-notes" id="challengeCompleteNotes" placeholder="Wie hast du es geschafft?" rows="3"></textarea>
+    <input type="hidden" id="completeChallengeId">
+    <button class="btn-confirm" onclick="confirmChallengeComplete()">✅ Challenge abschliessen</button>
+    <button class="btn-cancel" style="margin-top:8px" onclick="el('completeChallengeModal').style.display='none'">Abbrechen</button>
   </div>
 </div>
 
