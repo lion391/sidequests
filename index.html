@@ -8,6 +8,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="SideQuest">
 <meta name="theme-color" content="#0d0d0f">
+<link rel="manifest" href="/sidequests/manifest.json">
+<link rel="apple-touch-icon" href="/sidequests/icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 
 <!-- Firebase -->
@@ -2510,33 +2513,33 @@ const INFO_CONTENT = {
     title: '⚡ Quests — Wie es funktioniert',
     content: `
       <b style="color:var(--text)">Tägliche Quests</b><br>
-      Du bekommst 5 zufällige Aufgaben pro Tag. Du hast 10 Slots — erledigen oder skippen, beides zählt. Am nächsten Tag werden alle nicht erledigten Quests gelöscht und du startest neu.<br><br>
+      Du bekommst 5 zufällige Aufgaben pro Tag — max. 10 Slots: erledigen oder skippen, beides zählt. Nicht erledigte Quests werden am nächsten Tag automatisch gelöscht.<br><br>
       <b style="color:var(--text)">🌟 Wochenquest</b><br>
-      Ganz oben siehst du eine Wochenquest (Mo–So) — für alle in der Gruppe gleich. Bis zu 200 Punkte.<br><br>
+      Ganz oben siehst du eine Wochenquest (Mo–So) — für alle in der Gruppe gleich, bis zu 200 Punkte.<br><br>
       <b style="color:var(--text)">⚔️ Duelle</b><br>
-      Klappe "Duelle" auf — fordere jemanden heraus mit Aufgabe & Punkteinsatz. 1 Monat Zeit. Scheitert die Person, bekommst du ihre Punkte.<br><br>
+      Klappe "Duelle" auf — fordere jemanden mit Aufgabe & Punkteinsatz heraus. 1 Monat Zeit. Scheitert die Person, bekommst du ihre Punkte.<br><br>
       <b style="color:var(--text)">✍️ Eigene Quests erstellen</b><br>
-      Klappe "Eigene Quests erstellen" auf — erstell Quests mit Kategorie, Schwierigkeit und Jahreszeit. Wähle "Nur Gruppe" oder "🌍 Global" (sichtbar für alle SideQuest-Gruppen weltweit).<br><br>
+      Klappe "Eigene Quests erstellen" auf — erstell Quests mit Kategorie, Schwierigkeit und Jahreszeit. "Nur Gruppe" oder "🌍 Global" für alle SideQuest-Gruppen weltweit.<br><br>
       <b style="color:var(--text)">🔄 Tauschen</b><br>
       Mit dem 🔄-Button schickst du einen Quest an einen Freund. Einmal pro Tag möglich.<br><br>
-      <b style="color:var(--text)">🗺️ GPS-Quests</b><br>
-      Bei Lauf- und Wander-Quests erscheint ein ▶ Start Button — der GPS-Tracker zeichnet deine Strecke als anonyme Linie. Keine Koordinaten werden gespeichert.<br><br>
+      <b style="color:var(--text)">🗺️ GPS bei Lauf-Quests</b><br>
+      Bei Laufen, Wandern oder Velo erscheint ein ▶ Start Button — GPS zeichnet deine Strecke als anonyme Linie. Keine Koordinaten, kein Tempo gespeichert.<br><br>
       <b style="color:var(--text)">📸 Beweisfoto</b><br>
-      Beim Abschliessen kannst du ein normales Foto oder ein BeReal (Vorder + Rückkamera) machen.`
+      Normales Foto oder BeReal (Vorder + Rückkamera gleichzeitig).`
   },
   feed: {
     title: '👥 Feed — Wie es funktioniert',
     content: `
       <b style="color:var(--text)">Was siehst du hier?</b><br>
-      Alle Quests die du und deine Gruppe heute erledigt haben — mit Beweisfoto und Notizen. Am Ende des Tages wird der Feed automatisch geleert.<br><br>
+      Alle Quests die du und deine Gruppe heute erledigt haben — mit Beweisfoto und Notizen. Der Feed wird täglich um Mitternacht automatisch geleert.<br><br>
       <b style="color:var(--text)">🔍 Fotos anschauen</b><br>
       Tippe auf ein Beweisfoto um es im Vollbild zu sehen.<br><br>
       <b style="color:var(--text)">📸 Reaktionsfotos</b><br>
-      Tippe bei fremden Einträgen auf "📸 Reaktion" — dein Foto wird der Person zugestellt und verschwindet nachdem sie es gesehen hat.<br><br>
+      Bei fremden Einträgen: "📸 Reaktion" — dein Foto wird zugestellt und verschwindet nach dem Ansehen automatisch.<br><br>
       <b style="color:var(--text)">💬 Kommentare</b><br>
       Text-Kommentare bleiben den ganzen Tag sichtbar.<br><br>
-      <b style="color:var(--text)">🏅 Monatspreis</b><br>
-      Oben im Feed kannst du einen Monatspreis vorschlagen und abstimmen. Mehrheit entscheidet.`
+      <b style="color:var(--text)">🏅 Monatspreis abstimmen</b><br>
+      Oben im Feed: Preis vorschlagen und abstimmen. Mehrheit entscheidet — Erster gewinnt, Letzter zahlt.`
   },
   leaderboard: {
     title: '🏆 Rangliste — Wie es funktioniert',
@@ -2544,9 +2547,9 @@ const INFO_CONTENT = {
       <b style="color:var(--text)">Monats-Rangliste</b><br>
       Zeigt die Punkte aller Gruppenmitglieder im aktuellen Monat. Resettet automatisch am 1. des Monats.<br><br>
       <b style="color:var(--text)">🥇 Erster & 😬 Letzter</b><br>
-      Der Erste ist gold, der Letzte rot. Der Letzte zahlt den vereinbarten Monatspreis an den Ersten.<br><br>
-      <b style="color:var(--text)">🏅 Monatspreis festlegen</b><br>
-      Klicke auf "+ Preis vorschlagen" — alle stimmen ab, die Mehrheit gewinnt.<br><br>
+      Erster in Gold, Letzter in Rot — der Letzte zahlt den vereinbarten Monatspreis an den Ersten.<br><br>
+      <b style="color:var(--text)">🏅 Monatspreis</b><br>
+      "+ Preis vorschlagen" — alle stimmen ab, Mehrheit gewinnt. Auch im Feed abstimmbar.<br><br>
       <b style="color:var(--text)">Punkte</b><br>
       🟢 Leicht +10 · 🟡 Mittel +25 · 🔴 Schwer +50 · 🔥 Wild +75 · 🌟 Wochenquest bis +200 · 🏃 Fitness +10/km`
   },
@@ -2554,13 +2557,13 @@ const INFO_CONTENT = {
     title: '🏃 Fitness — Wie es funktioniert',
     content: `
       <b style="color:var(--text)">Lauf starten</b><br>
-      Tippe auf "Lauf starten" — GPS trackt deine Strecke als Linie ohne Koordinaten. Nach dem Stopp Punkte kassieren.<br><br>
+      "Lauf starten" — GPS trackt deine Strecke als anonyme Linie ohne Koordinaten. Nach dem Stopp Punkte kassieren.<br><br>
       <b style="color:var(--text)">+10 Punkte pro km</b><br>
       Läufe zählen zusätzlich zu deinen täglichen Quests — unbegrenzt.<br><br>
       <b style="color:var(--text)">🏆 Wochensieger</b><br>
-      Wer diese Woche am meisten km läuft bekommt am Sonntag +100 Bonuspunkte — aber nur wenn mindestens jemand gelaufen ist.<br><br>
-      <b style="color:var(--text)">📊 Läufe speichern</b><br>
-      In den Einstellungen kannst du aktivieren, dass deine Läufe dauerhaft lokal gespeichert werden.`
+      Wer diese Woche am meisten km läuft bekommt am Sonntag +100 Bonuspunkte — nur wenn mindestens jemand gelaufen ist.<br><br>
+      <b style="color:var(--text)">⏳ Automatische Löschung</b><br>
+      Läufe werden nach 7 Tagen automatisch gelöscht. Mit dem ⬇️ Button kannst du die Streckenkarte vorher als Bild auf deinem Gerät speichern.`
   }
 };
 
@@ -3510,5 +3513,14 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 
 
 <div class="toast" id="toast"></div>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sidequests/service-worker.js')
+      .then(r => console.log('SW registered'))
+      .catch(e => console.log('SW error', e));
+  });
+}
+</script>
 </body>
 </html>
