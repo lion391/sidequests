@@ -63,6 +63,8 @@ function showTab(id) {
   if (id === 'leaderboard') loadLeaderboard();
   if (id === 'challenges') loadChallengesTab();
   if (id === 'fitness') loadFitnessTab();
+  if (id === 'month') loadMonthTab();
+  if (id === 'community') loadCommunityTab();
 }
 window.showTab = showTab;
 window.showToast = showToast;
@@ -594,6 +596,7 @@ function renderQuestCard(q, i) {
           <span class="pts-inline pts-${q.diff}">+${pts} Pts</span>
           ${seen?`<span class="seen-badge" onclick="showQuestHistory('${q.t.replace(/'/g,"\\'")}')">📂 Verlauf</span>`:''}
           ${gps?`<span style="font-size:0.6rem;color:var(--accent3);border:1px solid var(--accent3);padding:2px 7px;border-radius:100px">🗺️ GPS</span>`:''}
+          ${q.isCommunity?`<span style="font-size:0.6rem;color:var(--wild);border:1px solid var(--wild);padding:2px 7px;border-radius:100px">✍️ Community</span>`:''}
         </div>
         <div class="quest-title">${q.t}</div>
         <div class="quest-desc">${q.d}</div>
@@ -630,6 +633,19 @@ window.loadAllQuests = async function() {
   btn.disabled=true; btn.innerHTML='<div class="spinner"></div> Laden...';
   el('questList').innerHTML=[0,1,2,3,4].map(i=>renderSkeleton(i)).join('');
   const picked=pickQuests();
+
+  // Mix in community quests (~30% chance, max 2 slots)
+  try {
+    const communityPool = await getCommunityQuestsForPool();
+    if (communityPool.length > 0) {
+      const usedTitles = new Set([...lastRound, ...completed.slice(0,20).map(q=>q.title)]);
+      const available = communityPool.filter(q => !usedTitles.has(q.t));
+      if (available.length > 0) {
+        const slots = shuffle([0,1,2,3,4]).slice(0, Math.min(2, available.length));
+        slots.forEach((slot, i) => { if(available[i]) picked[slot] = available[i]; });
+      }
+    }
+  } catch(e) { /* silently ignore */ }
   for(let i=0;i<5;i++){
     activeQuests[i]=picked[i];
     await new Promise(r=>setTimeout(r,100));
@@ -1923,6 +1939,246 @@ window.showRunDetail = function(runId) {
   // Already visible in the card — could expand later
 };
 
+// ── MONTHLY PRIZE & LEADERBOARD ──
+function monthKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+function daysLeftInMonth() {
+  const d = new Date();
+  const last = new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
+  return last - d.getDate();
+}
+
+async function loadMonthTab() {
+  const mk = monthKey();
+  const list = el('monthLeaderboard');
+  list.innerHTML = '<div style="color:var(--muted);font-size:0.78rem;padding:20px 0">Lade...</div>';
+
+  // Load active prize (voted or proposed)
+  const prizeRef = doc(db,'groups',groupId,'monthPrize',mk);
+  const prizeDoc = await getDoc(prizeRef);
+  const prizeData = prizeDoc.exists() ? prizeDoc.data() : null;
+
+  // Show prize box
+  if (prizeData?.winner) {
+    el('monthPrizeText').textContent = prizeData.winner;
+    el('monthPrizeStatus').textContent = '✅ Gewählt durch Abstimmung';
+    el('monthVoteBox').innerHTML = '';
+  } else if (prizeData?.proposals?.length > 0) {
+    // Show voting
+    renderPrizeVoting(prizeData, prizeRef, mk);
+  } else {
+    el('monthPrizeText').textContent = 'Noch kein Preis vorgeschlagen';
+    el('monthPrizeStatus').textContent = '';
+    el('monthVoteBox').innerHTML = `<button class="btn-new-quest" onclick="el('proposePrizeModal').style.display='flex'" style="background:var(--surface);color:var(--accent);border:1px solid var(--accent);margin-bottom:4px">🏅 Preis vorschlagen</button>`;
+  }
+
+  // Days left
+  el('monthDaysLeft').textContent = `⏳ Noch ${daysLeftInMonth()} Tage bis zur Monatsabrechnung`;
+
+  // Monthly leaderboard — count completions this month
+  const gDoc = await getDoc(doc(db,'groups',groupId));
+  const members = gDoc.data().members || [];
+  const stats = [];
+  for (const uid of members) {
+    const uDoc = await getDoc(doc(db,'users',uid));
+    const q = query(collection(db,'completions'),
+      where('userId','==',uid),
+      where('groupId','==',groupId),
+      where('date','>=',mk+'-01'),
+      where('date','<=',mk+'-31'));
+    const snap = await getDocs(q);
+    const pts = snap.docs.reduce((s,d)=>s+(d.data().pts||0),0);
+    stats.push({ uid, name: uDoc.exists()?uDoc.data().name:'Anonym', pts, count: snap.size });
+  }
+  stats.sort((a,b)=>b.pts-a.pts);
+
+  const medals = ['🥇','🥈','🥉'];
+  list.innerHTML = stats.map((s,i) => {
+    const isMe = s.uid === currentUser.uid;
+    const isFirst = i === 0;
+    const isLast = i === stats.length-1 && stats.length > 1;
+    return `<div style="background:var(--surface);border:1px solid ${isFirst?'var(--accent)':isLast?'var(--hard)':'var(--border)'};border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px;margin-bottom:8px">
+      <div style="font-size:1.2rem;min-width:28px">${isLast&&!isFirst?'😬':medals[i]||i+1}</div>
+      <div style="flex:1">
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.9rem">${s.name}${isMe?' (Du)':''}</div>
+        <div style="font-size:0.7rem;color:var(--muted)">${s.count} Quests erledigt</div>
+      </div>
+      <div style="font-family:'Syne',sans-serif;font-weight:800;color:${isFirst?'var(--accent)':isLast?'var(--hard)':'var(--text)'}">
+        ${s.pts}<span style="font-size:0.65rem;font-weight:400;color:var(--muted)"> Pts</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Check if month ended and award prize
+  checkMonthEnd(stats, prizeData, prizeRef, mk);
+}
+
+function renderPrizeVoting(prizeData, prizeRef, mk) {
+  const proposals = prizeData.proposals || [];
+  const myVote = prizeData.votes?.[currentUser.uid];
+  const voteCounts = {};
+  Object.values(prizeData.votes||{}).forEach(v => voteCounts[v] = (voteCounts[v]||0)+1);
+
+  el('monthPrizeText').textContent = 'Abstimmung läuft...';
+  el('monthPrizeStatus').textContent = `${Object.keys(prizeData.votes||{}).length} Stimmen abgegeben`;
+
+  el('monthVoteBox').innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:14px;margin-bottom:10px">
+      <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.85rem;margin-bottom:12px">🗳️ Für was spielen wir diesen Monat?</div>
+      ${proposals.map((p,i) => `
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <button onclick="votePrize('${prizeRef.path}','${i}')" style="flex:1;text-align:left;padding:10px 12px;background:${myVote==i?'var(--accent)':'var(--surface2)'};color:${myVote==i?'var(--bg)':'var(--text)'};border:1px solid ${myVote==i?'var(--accent)':'var(--border)'};border-radius:10px;font-family:'Space Mono',monospace;font-size:0.78rem;cursor:pointer">
+            ${p.text}
+          </button>
+          <span style="font-size:0.72rem;color:var(--muted);min-width:20px">${voteCounts[i]||0}×</span>
+        </div>`).join('')}
+      <button class="ai-cat-btn" onclick="el('proposePrizeModal').style.display='flex'" style="margin-top:8px;width:100%">+ Neuen Vorschlag hinzufügen</button>
+    </div>`;
+}
+
+window.submitPrizeProposal = async function() {
+  const text = el('prizeProposalText').value.trim();
+  if (!text) return showToast('Bitte etwas eingeben');
+  const mk = monthKey();
+  const prizeRef = doc(db,'groups',groupId,'monthPrize',mk);
+  const prizeDoc = await getDoc(prizeRef);
+  const existing = prizeDoc.exists() ? prizeDoc.data() : { proposals:[], votes:{} };
+  existing.proposals = existing.proposals || [];
+  existing.proposals.push({ text, from: currentUser.uid, fromName: currentUser.displayName||'Anonym' });
+  await setDoc(prizeRef, existing);
+  el('proposePrizeModal').style.display = 'none';
+  el('prizeProposalText').value = '';
+  showToast('✅ Vorschlag eingereicht!');
+  loadMonthTab();
+};
+
+window.votePrize = async function(refPath, idx) {
+  const prizeRef = doc(db, refPath);
+  const prizeDoc = await getDoc(prizeRef);
+  const data = prizeDoc.data();
+  data.votes = data.votes || {};
+  data.votes[currentUser.uid] = idx;
+  // Check if majority voted for same
+  const voteCounts = {};
+  Object.values(data.votes).forEach(v => voteCounts[v] = (voteCounts[v]||0)+1);
+  const gDoc = await getDoc(doc(db,'groups',groupId));
+  const total = (gDoc.data().members||[]).length;
+  const maxVotes = Math.max(...Object.values(voteCounts));
+  if (maxVotes > total/2) {
+    const winnerIdx = Object.keys(voteCounts).find(k=>voteCounts[k]===maxVotes);
+    data.winner = data.proposals[winnerIdx].text;
+  }
+  await updateDoc(prizeRef, data);
+  loadMonthTab();
+};
+
+async function checkMonthEnd(stats, prizeData, prizeRef, mk) {
+  const today = new Date();
+  const lastDay = new Date(today.getFullYear(), today.getMonth()+1, 0).getDate();
+  if (today.getDate() !== lastDay) return;
+  const bonusKey = `sq_month_bonus_${mk}`;
+  if (localStorage.getItem(bonusKey)) return;
+  if (stats.length < 2) return;
+  localStorage.setItem(bonusKey, '1');
+  const winner = stats[0];
+  const loser = stats[stats.length-1];
+  const prize = prizeData?.winner || 'kein Preis festgelegt';
+  showToast(`🏅 Monatsende! 🥇 ${winner.name} gewinnt! 😬 ${loser.name} muss zahlen: ${prize}`, 8000);
+}
+
+// ── COMMUNITY QUESTS ──
+window.selectCqDiff = function(diff, btn) {
+  document.querySelectorAll('#cqDiffBtns .ai-cat-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  el('cqDiff').value = diff;
+};
+
+window.openCreateCommunityQuest = function() {
+  el('cqTitle').value = ''; el('cqDesc').value = ''; el('cqEmoji').value = ''; el('cqCat').value = '';
+  el('cqDiff').value = '';
+  document.querySelectorAll('#cqDiffBtns .ai-cat-btn').forEach(b=>b.classList.remove('active'));
+  el('createCommunityQuestModal').style.display = 'flex';
+};
+
+window.submitCommunityQuest = async function() {
+  const t = el('cqTitle').value.trim();
+  const d = el('cqDesc').value.trim();
+  const diff = el('cqDiff').value;
+  const e = el('cqEmoji').value.trim() || '⭐';
+  const cat = el('cqCat').value.trim() || 'Community';
+  if (!t) return showToast('Titel eingeben');
+  if (!d) return showToast('Beschreibung eingeben');
+  if (!diff) return showToast('Schwierigkeit wählen');
+
+  const nextWeek = getWeekNumber() + 1;
+  const year = new Date().getFullYear();
+
+  await addDoc(collection(db,'community_quests'), {
+    t, d, diff, e, cat,
+    createdBy: currentUser.uid,
+    createdByName: currentUser.displayName || 'Anonym',
+    groupId,
+    activeFromWeek: nextWeek,
+    activeFromYear: year,
+    createdAt: serverTimestamp()
+  });
+
+  el('createCommunityQuestModal').style.display = 'none';
+  showToast('✅ Quest eingereicht! Ab nächster Woche aktiv.');
+  loadCommunityTab();
+};
+
+async function loadCommunityTab() {
+  const list = el('communityQuestList');
+  list.innerHTML = '<div style="color:var(--muted);font-size:0.78rem;padding:20px 0">Lade...</div>';
+
+  const q = query(collection(db,'community_quests'),
+    where('groupId','==',groupId),
+    orderBy('createdAt','desc'));
+  const snap = await getDocs(q);
+
+  if (snap.empty) {
+    list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted);font-size:0.8rem">Noch keine Community Quests.<br>Erstell den ersten!</div>';
+    return;
+  }
+
+  const currentWeek = getWeekNumber();
+  list.innerHTML = snap.docs.map(d => {
+    const q = d.data();
+    const isActive = q.activeFromWeek <= currentWeek;
+    const isMe = q.createdBy === currentUser.uid;
+    const pts = DIFF_PTS[q.diff] || 10;
+    return `<div style="background:var(--surface);border:1px solid ${isActive?'var(--accent)':'var(--border)'};border-radius:16px;padding:14px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+        <span class="diff-badge diff-${q.diff}">${DIFF_DE[q.diff]}</span>
+        <span class="pts-inline pts-${q.diff}">+${pts} Pts</span>
+        <span style="font-size:0.6rem;background:${isActive?'rgba(200,241,53,0.1)':'var(--surface2)'};color:${isActive?'var(--accent)':'var(--muted)'};padding:2px 7px;border-radius:100px;border:1px solid ${isActive?'var(--accent)':'var(--border)'}">
+          ${isActive ? '✅ Aktiv' : '⏳ Ab nächster Woche'}
+        </span>
+        ${isMe?`<span style="font-size:0.6rem;color:var(--accent3)">Von dir</span>`:`<span style="font-size:0.6rem;color:var(--muted)">Von ${q.createdByName}</span>`}
+      </div>
+      <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.95rem;margin-bottom:4px">${q.e} ${q.t}</div>
+      <div style="font-size:0.75rem;color:var(--muted);line-height:1.5">${q.d}</div>
+    </div>`;
+  }).join('');
+}
+
+// Load community quests into quest pool
+async function getCommunityQuestsForPool() {
+  try {
+    const currentWeek = getWeekNumber();
+    const currentYear = new Date().getFullYear();
+    const q = query(collection(db,'community_quests'),
+      where('groupId','==',groupId),
+      where('activeFromWeek','<=',currentWeek),
+      where('activeFromYear','==',currentYear));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({...d.data(), isCommunity: true}));
+  } catch(e) { return []; }
+}
+
 window.confirmResetPoints = function() {
   el('settingsModal').style.display = 'none';
   el('confirmResetModal').style.display = 'flex';
@@ -2272,6 +2528,8 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       <button class="tab-btn" id="tabBtn-leaderboard" onclick="showTab('leaderboard')">🏆 Liga</button>
       <button class="tab-btn" id="tabBtn-challenges" onclick="showTab('challenges')">⚔️ Duell</button>
       <button class="tab-btn" id="tabBtn-fitness" onclick="showTab('fitness')">🏃 Fitness</button>
+      <button class="tab-btn" id="tabBtn-month" onclick="showTab('month')">🏅 Monat</button>
+      <button class="tab-btn" id="tabBtn-community" onclick="showTab('community')">✍️ Quests</button>
       <button class="tab-btn" id="tabBtn-history" onclick="showTab('history')">📜 Log</button>
     </div>
 
@@ -2345,6 +2603,34 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       <!-- Past runs -->
       <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin:18px 0 10px">Meine Läufe</div>
       <div id="fitnessRunList"></div>
+    </div>
+
+    <!-- MONTH TAB -->
+    <div class="tab-content" id="tab-month" style="display:none">
+      <!-- Current prize -->
+      <div id="monthPrizeBox" style="background:var(--surface);border:2px solid var(--accent);border-radius:18px;padding:16px;margin-bottom:14px">
+        <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:8px">🏅 MONATSPREIS</div>
+        <div style="font-size:0.85rem;color:var(--text)" id="monthPrizeText">Noch kein Preis gewählt</div>
+        <div style="font-size:0.7rem;color:var(--muted);margin-top:4px" id="monthPrizeStatus"></div>
+      </div>
+
+      <!-- Voting / propose -->
+      <div id="monthVoteBox" style="margin-bottom:14px"></div>
+
+      <!-- Monthly leaderboard -->
+      <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Monats-Rangliste</div>
+      <div id="monthLeaderboard"></div>
+
+      <!-- Days left -->
+      <div style="text-align:center;font-size:0.72rem;color:var(--muted);margin-top:14px" id="monthDaysLeft"></div>
+    </div>
+
+    <!-- COMMUNITY QUESTS TAB -->
+    <div class="tab-content" id="tab-community" style="display:none">
+      <button class="btn-new-quest" onclick="openCreateCommunityQuest()" style="margin-bottom:14px;background:var(--surface);color:var(--wild);border:1px solid var(--wild)">✍️ Eigenen Quest erstellen</button>
+      <div style="font-size:0.72rem;color:var(--muted);margin-bottom:14px;line-height:1.6">Quests die du diese Woche einreichst, werden ab nächster Woche zufällig an Gruppenmitglieder verteilt — genau wie die normalen Quests.</div>
+      <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Eingereichte Quests</div>
+      <div id="communityQuestList"></div>
     </div>
 
     <!-- HISTORY TAB -->
@@ -2568,6 +2854,46 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <button class="btn-confirm" id="gpsUseBtn" onclick="gpsUseAsProof()" style="display:none;background:var(--accent3)">✅ Als Quest-Beweis</button>
     <button class="btn-confirm" id="gpsSaveFitnessBtn" onclick="gpsSaveAsFitness()" style="display:none;margin-top:8px">🏃 Lauf speichern & Punkte kassieren</button>
     <button class="btn-cancel" style="margin-top:8px" onclick="gpsCancel()">Abbrechen</button>
+  </div>
+</div>
+
+<!-- PROPOSE PRIZE MODAL -->
+<div class="modal-backdrop" id="proposePrizeModal" style="display:none">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🏅 Preis vorschlagen</div>
+    <div class="modal-sub">Was soll der Gewinner bekommen — bzw. was muss der Letzte zahlen?</div>
+    <textarea class="proof-notes" id="prizeProposalText" placeholder='z.B. "Wer verliert zahlt das nächste Abendessen" oder "Gewinner bekommt Kinokarte vom Letzten"' rows="3"></textarea>
+    <button class="btn-confirm" onclick="submitPrizeProposal()">📤 Vorschlag einreichen</button>
+    <button class="btn-cancel" style="margin-top:8px" onclick="el('proposePrizeModal').style.display='none'">Abbrechen</button>
+  </div>
+</div>
+
+<!-- CREATE COMMUNITY QUEST MODAL -->
+<div class="modal-backdrop" id="createCommunityQuestModal" style="display:none">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">✍️ Quest erstellen</div>
+    <div class="modal-sub">Dein Quest wird ab nächster Woche zufällig an Mitglieder verteilt.</div>
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:6px">Titel (max. 8 Wörter):</div>
+    <input class="auth-input" id="cqTitle" type="text" placeholder="Kurzer, packender Titel" style="margin-bottom:10px">
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:6px">Beschreibung:</div>
+    <textarea class="proof-notes" id="cqDesc" placeholder="Was genau muss man tun? Konkret und motivierend." rows="3"></textarea>
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px">Schwierigkeit:</div>
+    <div style="display:flex;gap:8px;margin-bottom:14px" id="cqDiffBtns">
+      <button class="ai-cat-btn" onclick="selectCqDiff('easy',this)">🟢 Leicht<br><span style="font-size:0.65rem">+10 Pts</span></button>
+      <button class="ai-cat-btn" onclick="selectCqDiff('medium',this)">🟡 Mittel<br><span style="font-size:0.65rem">+25 Pts</span></button>
+      <button class="ai-cat-btn" onclick="selectCqDiff('hard',this)">🔴 Schwer<br><span style="font-size:0.65rem">+50 Pts</span></button>
+      <button class="ai-cat-btn" onclick="selectCqDiff('wild',this)">🔥 Wild<br><span style="font-size:0.65rem">+75 Pts</span></button>
+    </div>
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:6px">Kategorie & Emoji:</div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <input class="auth-input" id="cqEmoji" type="text" placeholder="🎯" style="width:60px;text-align:center">
+      <input class="auth-input" id="cqCat" type="text" placeholder="Kategorie (z.B. Sozial)" style="flex:1">
+    </div>
+    <input type="hidden" id="cqDiff" value="">
+    <button class="btn-confirm" onclick="submitCommunityQuest()">✍️ Quest einreichen</button>
+    <button class="btn-cancel" style="margin-top:8px" onclick="el('createCommunityQuestModal').style.display='none'">Abbrechen</button>
   </div>
 </div>
 
