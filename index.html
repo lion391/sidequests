@@ -1058,31 +1058,22 @@ async function loadLeaderboard() {
     const uDoc=await getDoc(doc(db,'users',uid));
     if(!uDoc.exists()) continue;
     const u={uid,...uDoc.data()};
-
-    if(currentLbView === 'month') {
-      // Month points from completions
-      const mq=query(collection(db,'completions'),
-        where('userId','==',uid),where('groupId','==',groupId),
-        where('date','>=',mk+'-01'),where('date','<=',mk+'-31'));
-      const mSnap=await getDocs(mq);
-      u.displayPts=mSnap.docs.reduce((s,d)=>s+(d.data().pts||0),0);
-      u.displaySub=`${mSnap.size} Quests diesen Monat`;
-    } else {
-      u.displayPts=u.score||0;
-      const lvl=getLevel(u.score||0);
-      u.displaySub=`${lvl.icon} ${lvl.name}`;
-    }
+    const mq=query(collection(db,'completions'),
+      where('userId','==',uid),where('groupId','==',groupId),
+      where('date','>=',mk+'-01'),where('date','<=',mk+'-31'));
+    const mSnap=await getDocs(mq);
+    u.displayPts=mSnap.docs.reduce((s,d)=>s+(d.data().pts||0),0);
+    u.displaySub=`${mSnap.size} Quests diesen Monat`;
     users.push(u);
   }
 
   users.sort((a,b)=>b.displayPts-a.displayPts);
   const medals=['🥇','🥈','🥉'];
-  const isMonth = currentLbView === 'month';
 
   el('leaderboardList').innerHTML=users.map((u,i)=>{
     const isMe=u.uid===currentUser.uid;
-    const isLast = i === users.length-1 && users.length > 1 && isMonth;
-    const isFirst = i === 0 && isMonth;
+    const isFirst=i===0;
+    const isLast=i===users.length-1&&users.length>1;
     return `<div class="lb-item ${isMe?'lb-me':''}" style="${isLast?'border-color:var(--hard)':''}">
       <div class="lb-rank">${isLast&&!isFirst?'😬':medals[i]||i+1}</div>
       <div class="lb-avatar">${(u.name||'?')[0].toUpperCase()}</div>
@@ -1974,25 +1965,13 @@ window.toggleDuellAccordion = function() {
   if (open) loadChallengesTab();
 };
 
-window.toggleCommunityList = function() {
-  const list = el('communityQuestList');
+window.toggleCommunityAccordion = function() {
+  const content = el('communityAccordionContent');
   const chevron = el('communityChevron');
-  const open = list.style.display === 'none';
-  list.style.display = open ? 'block' : 'none';
+  const open = content.style.display === 'none';
+  content.style.display = open ? 'block' : 'none';
   chevron.textContent = open ? '▲' : '▼';
   if (open) loadCommunityTab();
-};
-
-let currentLbView = 'month';
-window.switchLbView = function(view) {
-  currentLbView = view;
-  el('lbBtnMonth').style.background = view === 'month' ? 'var(--accent)' : 'var(--surface)';
-  el('lbBtnMonth').style.color = view === 'month' ? 'var(--bg)' : 'var(--muted)';
-  el('lbBtnMonth').style.border = view === 'month' ? 'none' : '1px solid var(--border)';
-  el('lbBtnAll').style.background = view === 'all' ? 'var(--accent)' : 'var(--surface)';
-  el('lbBtnAll').style.color = view === 'all' ? 'var(--bg)' : 'var(--muted)';
-  el('lbBtnAll').style.border = view === 'all' ? 'none' : '1px solid var(--border)';
-  loadLeaderboard();
 };
 
 // Check for pending challenges and show badge
@@ -2669,13 +2648,19 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         <div class="quest-placeholder"><span style="font-size:2rem;display:block;margin-bottom:8px">✨</span>Drück den Knopf — 5 Abenteuer warten!</div>
       </div>
       <button class="btn-new-quest" id="newQuestBtn" style="display:flex"><span>⚡</span> 5 neue Sidequests</button>
-      <button class="btn-new-quest" onclick="openCreateCommunityQuest()" style="margin-top:8px;background:var(--surface);color:var(--wild);border:1px solid var(--wild);font-size:0.85rem;padding:12px">✍️ Eigenen Quest für die Gruppe erstellen</button>
-      <div style="font-size:0.68rem;color:var(--muted);text-align:center;margin-top:6px;margin-bottom:10px;line-height:1.5">Dein Quest wird ab nächster Woche zufällig verteilt</div>
-      <button onclick="toggleCommunityList()" style="width:100%;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:12px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;color:var(--muted);font-family:'Space Mono',monospace;font-size:0.72rem">
-        <span>✍️ Eingereichte Gruppen-Quests</span>
-        <span id="communityChevron">▼</span>
-      </button>
-      <div id="communityQuestList" style="display:none;margin-top:8px"></div>
+
+      <!-- COMMUNITY QUEST ACCORDION -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;margin-top:10px;overflow:hidden">
+        <button onclick="toggleCommunityAccordion()" style="width:100%;padding:14px 16px;background:transparent;border:none;display:flex;align-items:center;justify-content:space-between;cursor:pointer">
+          <span style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.9rem;color:var(--text)">✍️ Eigene Quests erstellen</span>
+          <span id="communityChevron" style="font-size:0.8rem;color:var(--muted)">▼</span>
+        </button>
+        <div id="communityAccordionContent" style="display:none;border-top:1px solid var(--border);padding:12px 14px">
+          <button class="btn-new-quest" onclick="openCreateCommunityQuest()" style="margin-bottom:12px;background:transparent;color:var(--wild);border:1px solid var(--wild);padding:10px">✍️ Neuen Quest erstellen</button>
+          <div style="font-size:0.7rem;color:var(--muted);margin-bottom:10px;line-height:1.5">Dein Quest wird ab nächster Woche zufällig an Gruppenmitglieder verteilt.</div>
+          <div id="communityQuestList"></div>
+        </div>
+      </div>
     </div>
 
     <!-- FEED TAB -->
@@ -2690,10 +2675,6 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         <div style="font-family:'Syne',sans-serif;font-size:0.7rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:6px">🏅 MONATSPREIS</div>
         <div style="font-size:0.85rem" id="lbPrizeText">Wird geladen...</div>
         <div style="font-size:0.68rem;color:var(--muted);margin-top:4px" id="lbDaysLeft"></div>
-      </div>
-      <div style="display:flex;gap:8px;margin-bottom:12px">
-        <button id="lbBtnMonth" onclick="switchLbView('month')" style="flex:1;padding:8px;background:var(--accent);color:var(--bg);border:none;border-radius:10px;font-family:'Syne',sans-serif;font-weight:700;font-size:0.78rem;cursor:pointer">📅 Monat</button>
-        <button id="lbBtnAll" onclick="switchLbView('all')" style="flex:1;padding:8px;background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:10px;font-family:'Syne',sans-serif;font-weight:700;font-size:0.78rem;cursor:pointer">🏆 Gesamt</button>
       </div>
       <div id="leaderboardList"></div>
     </div>
