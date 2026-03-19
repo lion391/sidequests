@@ -61,10 +61,7 @@ function showTab(id) {
   el('tabBtn-' + id).classList.add('active');
   if (id === 'feed') loadFeed();
   if (id === 'leaderboard') loadLeaderboard();
-  if (id === 'challenges') loadChallengesTab();
   if (id === 'fitness') loadFitnessTab();
-  if (id === 'month') loadMonthTab();
-  if (id === 'community') loadCommunityTab();
 }
 window.showTab = showTab;
 window.showToast = showToast;
@@ -283,7 +280,9 @@ function initMain() {
   showTab('quests');
   listenForTrades();
   listenForChallenges();
+  listenForChallengeBadge();
   loadWeekQuest();
+  checkDuellNotifications();
 }
 
 // ── LOCAL PROGRESS ──
@@ -899,6 +898,7 @@ window.closeDetailIfBackdrop = function(e) { if(e.target===el('detailModal')) cl
 // ── FEED ──
 async function loadFeed() {
   el('feedList').innerHTML='<div style="text-align:center;padding:30px;color:var(--muted);font-size:0.8rem">Lade Feed...</div>';
+  loadPrizeBoxes();
   const today=todayKey();
   const q=query(
     collection(db,'completions'),
@@ -1046,36 +1046,51 @@ window.markReactionSeen = async function(completionId, reactionId, targetUserId)
 
 // ── LEADERBOARD ──
 async function loadLeaderboard() {
-  el('leaderboardList').innerHTML='<div style="text-align:center;padding:30px;color:var(--muted);font-size:0.8rem">Lade Rangliste...</div>';
+  el('leaderboardList').innerHTML='<div style="text-align:center;padding:30px;color:var(--muted);font-size:0.8rem">Lade...</div>';
+  loadPrizeBoxes();
+
   const gDoc=await getDoc(doc(db,'groups',groupId));
   const members=gDoc.data().members||[];
-  const today=todayKey();
-  // Load all users
+  const mk = monthKey();
   const users=[];
+
   for(const uid of members){
     const uDoc=await getDoc(doc(db,'users',uid));
     if(!uDoc.exists()) continue;
     const u={uid,...uDoc.data()};
-    // Count today's completions
-    const tq=query(collection(db,'completions'),where('userId','==',uid),where('date','==',today));
-    const tSnap=await getDocs(tq);
-    u.todayCount=tSnap.size;
-    u.todayPts=tSnap.docs.reduce((s,d)=>s+(d.data().pts||0),0);
+
+    if(currentLbView === 'month') {
+      // Month points from completions
+      const mq=query(collection(db,'completions'),
+        where('userId','==',uid),where('groupId','==',groupId),
+        where('date','>=',mk+'-01'),where('date','<=',mk+'-31'));
+      const mSnap=await getDocs(mq);
+      u.displayPts=mSnap.docs.reduce((s,d)=>s+(d.data().pts||0),0);
+      u.displaySub=`${mSnap.size} Quests diesen Monat`;
+    } else {
+      u.displayPts=u.score||0;
+      const lvl=getLevel(u.score||0);
+      u.displaySub=`${lvl.icon} ${lvl.name}`;
+    }
     users.push(u);
   }
-  users.sort((a,b)=>(b.score||0)-(a.score||0));
+
+  users.sort((a,b)=>b.displayPts-a.displayPts);
   const medals=['🥇','🥈','🥉'];
+  const isMonth = currentLbView === 'month';
+
   el('leaderboardList').innerHTML=users.map((u,i)=>{
-    const lvl=getLevel(u.score||0);
     const isMe=u.uid===currentUser.uid;
-    return `<div class="lb-item ${isMe?'lb-me':''}">
-      <div class="lb-rank">${medals[i]||i+1}</div>
+    const isLast = i === users.length-1 && users.length > 1 && isMonth;
+    const isFirst = i === 0 && isMonth;
+    return `<div class="lb-item ${isMe?'lb-me':''}" style="${isLast?'border-color:var(--hard)':''}">
+      <div class="lb-rank">${isLast&&!isFirst?'😬':medals[i]||i+1}</div>
       <div class="lb-avatar">${(u.name||'?')[0].toUpperCase()}</div>
       <div style="flex:1">
         <div class="lb-name">${u.name||'Anonym'}${isMe?' (Du)':''}</div>
-        <div class="lb-sub">${lvl.icon} ${lvl.name} · Heute: ${u.todayCount} Quests (+${u.todayPts} Pts)</div>
+        <div class="lb-sub">${u.displaySub}</div>
       </div>
-      <div class="lb-score">${u.score||0}<span style="font-size:0.65rem;color:var(--muted);font-weight:400"> Pts</span></div>
+      <div class="lb-score" style="color:${isFirst?'var(--accent)':isLast?'var(--hard)':'var(--text)'}">${u.displayPts}<span style="font-size:0.65rem;color:var(--muted);font-weight:400"> Pts</span></div>
     </div>`;
   }).join('');
 }
@@ -1498,6 +1513,16 @@ function listenForChallenges() {
         el('incomingChallengeModal').style.display = 'flex';
       }
     });
+  });
+}
+
+function listenForChallengeBadge() {
+  // Show NEU badge on Duelle accordion when pending challenge arrives
+  const q = query(collection(db,'challenges'),
+    where('toUid','==',currentUser.uid), where('status','==','pending'));
+  onSnapshot(q, snap => {
+    const badge = el('duellNotifBadge');
+    if(badge) badge.style.display = snap.size > 0 ? 'inline' : 'none';
   });
 }
 
@@ -1939,7 +1964,87 @@ window.showRunDetail = function(runId) {
   // Already visible in the card — could expand later
 };
 
-// ── MONTHLY PRIZE & LEADERBOARD ──
+// ── UI TOGGLES ──
+window.toggleDuellAccordion = function() {
+  const content = el('duellAccordionContent');
+  const chevron = el('duellChevron');
+  const open = content.style.display === 'none';
+  content.style.display = open ? 'block' : 'none';
+  chevron.textContent = open ? '▲' : '▼';
+  if (open) loadChallengesTab();
+};
+
+window.toggleCommunityList = function() {
+  const list = el('communityQuestList');
+  const chevron = el('communityChevron');
+  const open = list.style.display === 'none';
+  list.style.display = open ? 'block' : 'none';
+  chevron.textContent = open ? '▲' : '▼';
+  if (open) loadCommunityTab();
+};
+
+let currentLbView = 'month';
+window.switchLbView = function(view) {
+  currentLbView = view;
+  el('lbBtnMonth').style.background = view === 'month' ? 'var(--accent)' : 'var(--surface)';
+  el('lbBtnMonth').style.color = view === 'month' ? 'var(--bg)' : 'var(--muted)';
+  el('lbBtnMonth').style.border = view === 'month' ? 'none' : '1px solid var(--border)';
+  el('lbBtnAll').style.background = view === 'all' ? 'var(--accent)' : 'var(--surface)';
+  el('lbBtnAll').style.color = view === 'all' ? 'var(--bg)' : 'var(--muted)';
+  el('lbBtnAll').style.border = view === 'all' ? 'none' : '1px solid var(--border)';
+  loadLeaderboard();
+};
+
+// Check for pending challenges and show badge
+async function checkDuellNotifications() {
+  try {
+    const q = query(collection(db,'challenges'),
+      where('toUid','==',currentUser.uid),
+      where('status','==','pending'));
+    const snap = await getDocs(q);
+    const badge = el('duellNotifBadge');
+    if (badge) badge.style.display = snap.size > 0 ? 'inline' : 'none';
+  } catch(e) {}
+}
+
+// Load prize into leaderboard tab and feed tab
+async function loadPrizeBoxes() {
+  const mk = monthKey();
+  const prizeRef = doc(db,'groups',groupId,'monthPrize',mk);
+  const prizeDoc = await getDoc(prizeRef);
+  const prizeData = prizeDoc.exists() ? prizeDoc.data() : null;
+  const daysLeft = daysLeftInMonth();
+
+  // Leaderboard prize box
+  const lbPrize = el('lbPrizeText');
+  const lbDays = el('lbDaysLeft');
+  if(lbPrize) lbPrize.textContent = prizeData?.winner || 'Noch kein Preis gewählt';
+  if(lbDays) lbDays.textContent = `⏳ Noch ${daysLeft} Tage bis zur Abrechnung`;
+
+  // Feed prize voting box
+  const feedBox = el('feedPrizeBox');
+  if (!feedBox) return;
+  if (prizeData?.winner) {
+    feedBox.innerHTML = `<div style="background:var(--surface);border:1px solid var(--accent);border-radius:14px;padding:12px 14px;font-size:0.78rem;margin-bottom:4px">🏅 <strong style="color:var(--accent)">Monatspreis:</strong> ${prizeData.winner}</div>`;
+  } else if (prizeData?.proposals?.length > 0) {
+    const voteCounts = {};
+    Object.values(prizeData.votes||{}).forEach(v => voteCounts[v]=(voteCounts[v]||0)+1);
+    const myVote = prizeData.votes?.[currentUser.uid];
+    feedBox.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:4px">
+      <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.85rem;margin-bottom:10px">🗳️ Abstimmung: Monatspreis</div>
+      ${prizeData.proposals.map((p,i)=>`
+        <button onclick="votePrize('${prizeRef.path}','${i}')" style="width:100%;text-align:left;padding:9px 12px;margin-bottom:6px;background:${myVote==i?'var(--accent)':'var(--surface2)'};color:${myVote==i?'var(--bg)':'var(--text)'};border:1px solid ${myVote==i?'var(--accent)':'var(--border)'};border-radius:10px;font-family:'Space Mono',monospace;font-size:0.75rem;cursor:pointer">
+          ${p.text} <span style="float:right;opacity:0.6">${voteCounts[i]||0}×</span>
+        </button>`).join('')}
+      <button onclick="el('proposePrizeModal').style.display='flex'" style="font-size:0.72rem;color:var(--accent3);background:transparent;border:none;cursor:pointer;margin-top:4px">+ Eigenen Vorschlag hinzufügen</button>
+    </div>`;
+  } else {
+    feedBox.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between">
+      <span style="font-size:0.78rem;color:var(--muted)">🏅 Noch kein Monatspreis vorgeschlagen</span>
+      <button onclick="el('proposePrizeModal').style.display='flex'" style="font-size:0.72rem;color:var(--accent);background:transparent;border:1px solid var(--accent);border-radius:8px;padding:4px 10px;cursor:pointer">Vorschlagen</button>
+    </div>`;
+  }
+}
 function monthKey() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
@@ -2525,17 +2630,13 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <div class="tab-bar">
       <button class="tab-btn active" id="tabBtn-quests" onclick="showTab('quests')">⚡ Quests</button>
       <button class="tab-btn" id="tabBtn-feed" onclick="showTab('feed')">👥 Feed</button>
-      <button class="tab-btn" id="tabBtn-leaderboard" onclick="showTab('leaderboard')">🏆 Liga</button>
-      <button class="tab-btn" id="tabBtn-challenges" onclick="showTab('challenges')">⚔️ Duell</button>
+      <button class="tab-btn" id="tabBtn-leaderboard" onclick="showTab('leaderboard')">🏆 Rangliste</button>
       <button class="tab-btn" id="tabBtn-fitness" onclick="showTab('fitness')">🏃 Fitness</button>
-      <button class="tab-btn" id="tabBtn-month" onclick="showTab('month')">🏅 Monat</button>
-      <button class="tab-btn" id="tabBtn-community" onclick="showTab('community')">✍️ Quests</button>
       <button class="tab-btn" id="tabBtn-history" onclick="showTab('history')">📜 Log</button>
     </div>
 
     <!-- QUESTS TAB -->
     <div class="tab-content" id="tab-quests">
-      <!-- WOCHENQUEST -->
       <div id="weekQuestBox" style="display:none;background:var(--surface);border:2px solid var(--wild);border-radius:18px;padding:16px;margin-bottom:14px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
           <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:0.8rem;color:var(--wild)">🌟 WOCHENQUEST</span>
@@ -2549,38 +2650,57 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         </div>
       </div>
 
+      <!-- DUELL ACCORDION -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;margin-bottom:14px;overflow:hidden">
+        <button onclick="toggleDuellAccordion()" style="width:100%;padding:14px 16px;background:transparent;border:none;display:flex;align-items:center;justify-content:space-between;cursor:pointer">
+          <span style="display:flex;align-items:center;gap:8px;font-family:'Syne',sans-serif;font-weight:700;font-size:0.9rem;color:var(--text)">
+            ⚔️ Duelle
+            <span id="duellNotifBadge" style="display:none;background:var(--accent2);color:#fff;font-size:0.6rem;font-weight:700;padding:2px 7px;border-radius:100px">NEU</span>
+          </span>
+          <span id="duellChevron" style="font-size:0.8rem;color:var(--muted)">▼</span>
+        </button>
+        <div id="duellAccordionContent" style="display:none;border-top:1px solid var(--border);padding:12px 14px">
+          <button class="btn-new-quest" onclick="openCreateChallenge()" style="margin-bottom:12px;background:transparent;color:var(--accent2);border:1px solid var(--accent2);padding:10px">⚔️ Neues Duell erstellen</button>
+          <div id="challengesList"></div>
+        </div>
+      </div>
+
       <div class="quest-list" id="questList">
         <div class="quest-placeholder"><span style="font-size:2rem;display:block;margin-bottom:8px">✨</span>Drück den Knopf — 5 Abenteuer warten!</div>
       </div>
       <button class="btn-new-quest" id="newQuestBtn" style="display:flex"><span>⚡</span> 5 neue Sidequests</button>
-    </div>
-
-    <!-- CHALLENGES TAB -->
-    <div class="tab-content" id="tab-challenges" style="display:none">
-      <button class="btn-new-quest" onclick="openCreateChallenge()" style="margin-bottom:14px;background:var(--surface);color:var(--accent2);border:1px solid var(--accent2)">⚔️ Challenge erstellen</button>
-      <div style="font-family:'Syne',sans-serif;font-size:0.75rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Aktive Challenges</div>
-      <div id="challengesList"></div>
+      <button class="btn-new-quest" onclick="openCreateCommunityQuest()" style="margin-top:8px;background:var(--surface);color:var(--wild);border:1px solid var(--wild);font-size:0.85rem;padding:12px">✍️ Eigenen Quest für die Gruppe erstellen</button>
+      <div style="font-size:0.68rem;color:var(--muted);text-align:center;margin-top:6px;margin-bottom:10px;line-height:1.5">Dein Quest wird ab nächster Woche zufällig verteilt</div>
+      <button onclick="toggleCommunityList()" style="width:100%;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:12px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;color:var(--muted);font-family:'Space Mono',monospace;font-size:0.72rem">
+        <span>✍️ Eingereichte Gruppen-Quests</span>
+        <span id="communityChevron">▼</span>
+      </button>
+      <div id="communityQuestList" style="display:none;margin-top:8px"></div>
     </div>
 
     <!-- FEED TAB -->
     <div class="tab-content" id="tab-feed" style="display:none">
+      <div id="feedPrizeBox" style="margin-bottom:14px"></div>
       <div id="feedList"></div>
     </div>
 
     <!-- LEADERBOARD TAB -->
     <div class="tab-content" id="tab-leaderboard" style="display:none">
+      <div style="background:var(--surface);border:2px solid var(--accent);border-radius:16px;padding:14px;margin-bottom:14px">
+        <div style="font-family:'Syne',sans-serif;font-size:0.7rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:6px">🏅 MONATSPREIS</div>
+        <div style="font-size:0.85rem" id="lbPrizeText">Wird geladen...</div>
+        <div style="font-size:0.68rem;color:var(--muted);margin-top:4px" id="lbDaysLeft"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button id="lbBtnMonth" onclick="switchLbView('month')" style="flex:1;padding:8px;background:var(--accent);color:var(--bg);border:none;border-radius:10px;font-family:'Syne',sans-serif;font-weight:700;font-size:0.78rem;cursor:pointer">📅 Monat</button>
+        <button id="lbBtnAll" onclick="switchLbView('all')" style="flex:1;padding:8px;background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:10px;font-family:'Syne',sans-serif;font-weight:700;font-size:0.78rem;cursor:pointer">🏆 Gesamt</button>
+      </div>
       <div id="leaderboardList"></div>
     </div>
 
     <!-- FITNESS TAB -->
     <div class="tab-content" id="tab-fitness" style="display:none">
-
-      <!-- Start tracker button -->
-      <button class="btn-new-quest" onclick="openFitnessTracker()" style="margin-bottom:16px">
-        🏃 Lauf starten — +10 Pts / km
-      </button>
-
-      <!-- This week stats -->
+      <button class="btn-new-quest" onclick="openFitnessTracker()" style="margin-bottom:16px">🏃 Lauf starten — +10 Pts / km</button>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:14px">
         <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:12px">Diese Woche</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
@@ -2595,42 +2715,10 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         </div>
         <div style="font-size:0.72rem;color:var(--muted)" id="fitnessWeekInfo">Wer diese Woche am meisten läuft bekommt +100 Bonuspunkte!</div>
       </div>
-
-      <!-- Week leaderboard -->
-      <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Wochen-Rangliste 🏆</div>
+      <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Wochen-Rangliste</div>
       <div id="fitnessLeaderboard"></div>
-
-      <!-- Past runs -->
       <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin:18px 0 10px">Meine Läufe</div>
       <div id="fitnessRunList"></div>
-    </div>
-
-    <!-- MONTH TAB -->
-    <div class="tab-content" id="tab-month" style="display:none">
-      <!-- Current prize -->
-      <div id="monthPrizeBox" style="background:var(--surface);border:2px solid var(--accent);border-radius:18px;padding:16px;margin-bottom:14px">
-        <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:8px">🏅 MONATSPREIS</div>
-        <div style="font-size:0.85rem;color:var(--text)" id="monthPrizeText">Noch kein Preis gewählt</div>
-        <div style="font-size:0.7rem;color:var(--muted);margin-top:4px" id="monthPrizeStatus"></div>
-      </div>
-
-      <!-- Voting / propose -->
-      <div id="monthVoteBox" style="margin-bottom:14px"></div>
-
-      <!-- Monthly leaderboard -->
-      <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Monats-Rangliste</div>
-      <div id="monthLeaderboard"></div>
-
-      <!-- Days left -->
-      <div style="text-align:center;font-size:0.72rem;color:var(--muted);margin-top:14px" id="monthDaysLeft"></div>
-    </div>
-
-    <!-- COMMUNITY QUESTS TAB -->
-    <div class="tab-content" id="tab-community" style="display:none">
-      <button class="btn-new-quest" onclick="openCreateCommunityQuest()" style="margin-bottom:14px;background:var(--surface);color:var(--wild);border:1px solid var(--wild)">✍️ Eigenen Quest erstellen</button>
-      <div style="font-size:0.72rem;color:var(--muted);margin-bottom:14px;line-height:1.6">Quests die du diese Woche einreichst, werden ab nächster Woche zufällig an Gruppenmitglieder verteilt — genau wie die normalen Quests.</div>
-      <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Eingereichte Quests</div>
-      <div id="communityQuestList"></div>
     </div>
 
     <!-- HISTORY TAB -->
