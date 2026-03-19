@@ -217,6 +217,10 @@ async function loadGroup() {
   el('groupCodeDisplay').textContent = currentGroup.code;
   el('groupNameDisplay').textContent = currentGroup.name;
 
+  // Reset state for new group
+  activeQuests = [];
+  activeQuestIndex = -1;
+
   // Clean up old listeners
   if (feedUnsubscribe) { feedUnsubscribe(); feedUnsubscribe = null; }
   if (leaderboardUnsubscribe) { leaderboardUnsubscribe(); leaderboardUnsubscribe = null; }
