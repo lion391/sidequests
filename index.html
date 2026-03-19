@@ -245,8 +245,6 @@ function initMain() {
   listenForChallengeBadge();
   loadWeekQuest();
   checkDuellNotifications();
-  // Fetch weather in background for quest filtering
-  fetchWeather().then(updateWeatherDisplay);
 }
 
 // ── LOCAL PROGRESS ──
@@ -536,9 +534,8 @@ function shuffle(arr) {
 
 function pickQuests() {
   const used = new Set([...lastRound, ...completed.slice(0,20).map(q=>q.title)]);
-  let pool = ALL_QUESTS.filter(q => !used.has(q.t) && isQuestMatchingWeather(q));
-  if(pool.length < 5) pool = ALL_QUESTS.filter(q => isQuestMatchingWeather(q));
-  if(pool.length < 5) pool = [...ALL_QUESTS]; // fallback if weather too restrictive
+  let pool = ALL_QUESTS.filter(q => !used.has(q.t));
+  if(pool.length < 5) pool = [...ALL_QUESTS];
   pool = shuffle(pool);
   const result=[];
   const plan = shuffle(['easy','easy','medium','medium','hard']);
@@ -619,10 +616,6 @@ window.loadAllQuests = async function() {
   const btn=el('newQuestBtn');
   btn.disabled=true; btn.innerHTML='<div class="spinner"></div> Laden...';
   el('questList').innerHTML=[0,1,2,3,4].map(i=>renderSkeleton(i)).join('');
-
-  // Fetch weather first for smart filtering
-  await fetchWeather();
-  updateWeatherDisplay();
   const picked=pickQuests();
 
   // Mix in community quests (~30% chance, max 2 slots)
@@ -1338,124 +1331,6 @@ window.guideNext = function() {
 };
 
 // ── SEASONAL QUEST FILTERING ──
-// ── WEATHER SYSTEM ──
-const WEATHER_API_KEY = '6a449a79dbd09fe2b4ee14a58b20827c';
-let currentWeather = null; // cached weather data
-
-async function fetchWeather() {
-  const cacheKey = 'sq_weather';
-  const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
-  // Use cache if less than 30 min old
-  if (cached && Date.now() - cached.ts < 30 * 60 * 1000) {
-    currentWeather = cached;
-    return cached;
-  }
-  try {
-    // Get user location
-    const pos = await new Promise((res, rej) =>
-      navigator.geolocation.getCurrentPosition(res, rej, {timeout: 5000}));
-    const {latitude: lat, longitude: lon} = pos.coords;
-    const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${WEATHER_API_KEY}&units=metric&lang=de`;
-    const data = await (await fetch(url)).json();
-    const weather = {
-      ts: Date.now(),
-      temp: Math.round(data.main.temp),
-      desc: data.weather[0].description,
-      main: data.weather[0].main.toLowerCase(), // rain, snow, clear, clouds, drizzle, thunderstorm, mist
-      city: data.name,
-      wind: data.wind.speed,
-      humidity: data.main.humidity
-    };
-    localStorage.setItem(cacheKey, JSON.stringify(weather));
-    currentWeather = weather;
-    return weather;
-  } catch(e) {
-    currentWeather = null;
-    return null;
-  }
-}
-
-function getWeatherCondition() {
-  if (!currentWeather) return 'unknown';
-  const m = currentWeather.main;
-  if (m.includes('rain') || m.includes('drizzle')) return 'rain';
-  if (m.includes('snow')) return 'snow';
-  if (m.includes('thunder')) return 'storm';
-  if (m.includes('mist') || m.includes('fog')) return 'fog';
-  if (m.includes('clear')) return currentWeather.temp >= 18 ? 'sunny' : 'clear';
-  return 'cloudy';
-}
-
-function getWeatherEmoji() {
-  const c = getWeatherCondition();
-  return {rain:'🌧️', snow:'❄️', storm:'⛈️', fog:'🌫️', sunny:'☀️', clear:'🌤️', cloudy:'☁️', unknown:'🌡️'}[c] || '🌡️';
-}
-
-// What weather each quest type needs
-// 'any' = works in all weather, 'rain' = needs rain, 'sunny' = needs sun, 'snow' = needs snow, 'dry' = bad in rain
-const QUEST_WEATHER_TAGS = {
-  // Needs sunshine / warm
-  sunny: ['Kanu','SUP','Schwimm','See schwimmen','Picknick','Sonnenbaden','Grillieren','Velotour','draussen sitzen','Barfuss','Beobachte Sterne','Sonnenuntergang','Sonnenaufgang'],
-  // Only fun/makes sense in rain
-  rain: ['bei Regen raus','Regen spazieren','bei Regen joggen'],
-  // Snow specific
-  snow: ['Schnee','Schlitteln','Schneemann'],
-  // Bad in heavy rain (prefer to avoid)
-  dry: ['Velo','Wandern','Spazieren','raus gehen','draussen','im Freien','Park','Wald'],
-};
-
-function isQuestMatchingWeather(q) {
-  const text = (q.t + ' ' + q.d).toLowerCase();
-  const condition = getWeatherCondition();
-
-  // Community quests with explicit season: check season first
-  if (q.season && q.season !== 'all') {
-    if (q.season !== getCurrentSeason()) return false;
-  }
-
-  // Check if quest requires specific weather
-  const needsSun = QUEST_WEATHER_TAGS.sunny.some(kw => text.includes(kw.toLowerCase()));
-  const needsRain = QUEST_WEATHER_TAGS.rain.some(kw => text.includes(kw.toLowerCase()));
-  const needsSnow = QUEST_WEATHER_TAGS.snow.some(kw => text.includes(kw.toLowerCase()));
-  const prefersDry = QUEST_WEATHER_TAGS.dry.some(kw => text.includes(kw.toLowerCase()));
-
-  if (currentWeather === null) return true; // no weather data → show all
-
-  if (needsSun && condition !== 'sunny' && condition !== 'clear') return false;
-  if (needsRain && condition !== 'rain') return false;
-  if (needsSnow && condition !== 'snow') return false;
-  if (prefersDry && (condition === 'rain' || condition === 'storm')) return false;
-
-  // Season filter for built-in quests
-  const season = getCurrentSeason();
-  const seasonExclude = {
-    winter: ['kanu','sup','see schwimmen','velotour','fahrrad','grillen'],
-    autumn: ['kanu','sup','see schwimmen'],
-    spring: [], summer: []
-  }[season] || [];
-  if (seasonExclude.some(kw => text.includes(kw))) return false;
-
-  return true;
-}
-
-function getCurrentSeason() {
-  const m = new Date().getMonth() + 1;
-  if (m >= 3 && m <= 5) return 'spring';
-  if (m >= 6 && m <= 8) return 'summer';
-  if (m >= 9 && m <= 11) return 'autumn';
-  return 'winter';
-}
-
-function updateWeatherDisplay() {
-  if (!currentWeather) return;
-  const badge = el('weatherBadge');
-  if (!badge) return;
-  badge.style.display = 'flex';
-  el('weatherEmoji').textContent = getWeatherEmoji();
-  el('weatherTemp').textContent = currentWeather.temp + '°C';
-  el('weatherCity').textContent = currentWeather.city;
-}
-
 // ── WEEK QUEST ──
 const WEEK_QUESTS = [
   {t:'Triff 3 Freunde persönlich',d:'Triff diese Woche 3 verschiedene Personen in echt — kein Chat, kein Anruf. Kaffee, Spaziergang, Essen, egal.',pts:150,e:'👥'},
@@ -2468,8 +2343,6 @@ const INFO_CONTENT = {
   quests: {
     title: '⚡ Quests — Wie es funktioniert',
     content: `
-      <b style="color:var(--text)">🌤️ Wetter-Filter</b><br>
-      Die App kennt dein aktuelles Wetter — bei Regen kommen keine "Picknick"- oder "Kanu"-Quests, bei Schnee keine Sommersachen. Das Wetter siehst du oben im Header.<br><br>
       <b style="color:var(--text)">Tägliche Quests</b><br>
       Du hast 10 Slots pro Tag — erledigen oder skippen, beides zählt. Am nächsten Tag starten die Quests neu.<br><br>
       <b style="color:var(--text)">🌟 Wochenquest</b><br>
@@ -2958,12 +2831,6 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       </div>
     </div>
 
-    <!-- Weather strip -->
-    <div id="weatherBadge" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:8px 14px;margin-bottom:10px;font-size:0.82rem;color:var(--muted);display:flex;align-items:center;gap:8px">
-      <span id="weatherEmoji" style="font-size:1.2rem"></span>
-      <span id="weatherTemp" style="font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;color:var(--text)"></span>
-      <span id="weatherCity" style="font-size:0.7rem;color:var(--muted)"></span>
-    </div>
 
     <div class="stats-row">
       <div class="stat-card"><span style="font-size:1.2rem">📅</span><div><div class="stat-val" id="mainDailyCount">0</div><div>heute / 10</div></div></div>
