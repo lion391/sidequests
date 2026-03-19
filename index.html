@@ -688,8 +688,14 @@ window.openProofModal = function(i) {
   el('proofNotes').value='';
   el('photoPreviewBack').style.display='none';
   el('photoPreviewFront').style.display='none';
-  el('photoPlaceholder').style.display='flex';
   el('beRealResult').style.display='none';
+  el('beRealStepUI').style.display='none';
+  el('beRealBackDone').textContent='';
+  // Show GPS option only if quest is GPS-compatible
+  const gps = isGpsQuest(q) || q.requiresGps;
+  el('photoOptionsNormal').style.display = gps ? 'none' : 'grid';
+  el('photoOptionsGps').style.display = gps ? 'grid' : 'none';
+  el('photoPlaceholder').style.display='flex';
   el('proofModal').style.display='flex';
 };
 
@@ -701,7 +707,21 @@ window.closeProofModal = function(resetIndex=true) {
 
 window.takeNormalPhoto = function() { el('photoInputNormal').click(); };
 window.takeBeReal = function() {
+  // Step 1: show BeReal UI with two buttons
+  el('photoPlaceholder').style.display = 'none';
+  el('beRealStepUI').style.display = 'flex';
+  el('beRealResult').style.display = 'none';
+};
+
+window.beRealTakeBack = function() {
+  el('photoInputBack').value = '';
   el('photoInputBack').click();
+};
+
+window.beRealTakeFront = function() {
+  if (!pendingPhotoBack) return showToast('Zuerst Rückkamera aufnehmen');
+  el('photoInputFront').value = '';
+  el('photoInputFront').click();
 };
 
 el('photoInputNormal').onchange = e => {
@@ -711,6 +731,7 @@ el('photoInputNormal').onchange = e => {
     pendingPhotoBack=ev.target.result;
     pendingPhotoFront=null;
     el('photoPlaceholder').style.display='none';
+    el('beRealStepUI').style.display='none';
     el('beRealResult').style.display='none';
     el('photoPreviewBack').src=pendingPhotoBack;
     el('photoPreviewBack').style.display='block';
@@ -724,9 +745,9 @@ el('photoInputBack').onchange = e => {
   const r=new FileReader();
   r.onload=ev=>{
     pendingPhotoBack=ev.target.result;
-    // Now ask for front
-    showToast('Super! Jetzt Frontkamera für BeReal 📸');
-    setTimeout(()=>el('photoInputFront').click(), 800);
+    // Update step UI to show back is done
+    el('beRealBackDone').textContent = '✅';
+    showToast('Rückkamera ✅ — jetzt Frontkamera!');
   };
   r.readAsDataURL(f);
 };
@@ -736,10 +757,10 @@ el('photoInputFront').onchange = e => {
   const r=new FileReader();
   r.onload=ev=>{
     pendingPhotoFront=ev.target.result;
+    el('beRealStepUI').style.display='none';
     el('photoPlaceholder').style.display='none';
     el('photoPreviewBack').style.display='none';
     el('photoPreviewFront').style.display='none';
-    // Compose BeReal image on canvas
     composeBeReal(pendingPhotoBack, pendingPhotoFront);
   };
   r.readAsDataURL(f);
@@ -909,7 +930,7 @@ async function loadFeed() {
         <div class="feed-header">
           <div class="feed-avatar">${(c.userName||'?')[0].toUpperCase()}</div>
           <div style="flex:1">
-            <div class="feed-username">${c.userName}${isMe?' (Du)':''}</div>
+            <div class="feed-username">${isMe?'Du':c.userName}</div>
             <div class="feed-time">${c.questEmoji} ${c.questTitle}</div>
           </div>
           <span class="pts-inline pts-${c.questDiff}">+${c.pts}</span>
@@ -917,10 +938,10 @@ async function loadFeed() {
         ${c.photoUrl?`<img class="feed-photo" src="${c.photoUrl}" alt="Beweis">` : ''}
         ${c.notes?`<div class="feed-note">"${c.notes}"</div>`:''}
         <div class="feed-reactions" id="reactions-${d.id}"></div>
-        <div class="feed-react-bar">
+        ${isMe ? '' : `<div class="feed-react-bar">
           <button class="react-btn" onclick="openReactionModal('${d.id}','${c.userId}')">📸 Reaktion</button>
           <button class="react-btn" onclick="openCommentModal('${d.id}')">💬 Kommentar</button>
-        </div>
+        </div>`}
       </div>`;
     }).join('');
     // Load reactions for each
@@ -2909,11 +2930,27 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <div class="modal-sub" id="proofQuestName"></div>
 
     <div id="photoPlaceholder" style="display:flex">
-      <div class="photo-options" style="grid-template-columns:1fr 1fr 1fr">
+      <div class="photo-options" id="photoOptionsNormal" style="grid-template-columns:1fr 1fr">
+        <button class="photo-opt-btn" onclick="takeNormalPhoto()">📷<br>Foto</button>
+        <button class="photo-opt-btn" onclick="takeBeReal()">📸<br>BeReal<br><span style="font-size:0.65rem;color:var(--muted)">Vorder+Rück</span></button>
+      </div>
+      <div class="photo-options" id="photoOptionsGps" style="grid-template-columns:1fr 1fr 1fr;display:none">
         <button class="photo-opt-btn" onclick="takeNormalPhoto()">📷<br>Foto</button>
         <button class="photo-opt-btn" onclick="takeBeReal()">📸<br>BeReal<br><span style="font-size:0.65rem;color:var(--muted)">Vorder+Rück</span></button>
         <button class="photo-opt-btn" onclick="openGpsTracker()" style="border-color:var(--accent3);color:var(--accent3)">🗺️<br>GPS<br><span style="font-size:0.65rem;color:var(--muted)">Strecke</span></button>
       </div>
+    </div>
+
+    <!-- BeReal Step UI -->
+    <div id="beRealStepUI" style="display:none;flex-direction:column;gap:10px;margin-bottom:12px">
+      <div style="font-size:0.78rem;color:var(--muted);text-align:center;margin-bottom:4px">Mach zwei Fotos — Rück- dann Frontkamera</div>
+      <button class="btn-confirm" onclick="beRealTakeBack()" style="display:flex;align-items:center;justify-content:center;gap:8px">
+        📷 Rückkamera <span id="beRealBackDone"></span>
+      </button>
+      <button class="btn-confirm" onclick="beRealTakeFront()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border)">
+        🤳 Frontkamera
+      </button>
+      <button class="btn-cancel" style="font-size:0.75rem" onclick="el('beRealStepUI').style.display='none';el('photoPlaceholder').style.display='flex'">Abbrechen</button>
     </div>
     <div class="photo-preview-wrap" style="display:none" id="photoPreviewWrap">
       <img id="photoPreviewBack" style="display:none;width:100%;border-radius:14px;max-height:240px;object-fit:cover;margin-bottom:12px">
