@@ -636,6 +636,7 @@ window.loadAllQuests = async function() {
   }
   isLoading=false; btn.disabled=false; btn.style.display='none';
   btn.innerHTML='<span>⚡</span> 5 neue Sidequests';
+  saveActiveQuests(); // persist so they survive app close/group switch
   updateMainUI();
 };
 
