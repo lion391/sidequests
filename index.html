@@ -226,6 +226,28 @@ function loadLocalProgress() {
     lastRound = d.lastRound || [];
   } catch(e) {}
 }
+function saveLocalProgress() {
+  localStorage.setItem('sq_progress', JSON.stringify({ score, completed, lastRound, dailySkips: getDailySkips() }));
+}
+function getDailySkips() {
+  try {
+    const d = JSON.parse(localStorage.getItem('sq_progress') || '{}');
+    if(!d.dailySkips) return {};
+    return d.dailySkips;
+  } catch(e) { return {}; }
+}
+function dailySkipCount() {
+  const skips = getDailySkips();
+  return skips[todayKey()] || 0;
+}
+function incrementDailySkip() {
+  const skips = getDailySkips();
+  skips[todayKey()] = (skips[todayKey()] || 0) + 1;
+  localStorage.setItem('sq_progress', JSON.stringify({ score, completed, lastRound, dailySkips: skips }));
+}
+function dailyUsedCount() {
+  return dailyDoneCount() + dailySkipCount();
+}
 function dailyDoneCount() {
   return completed.filter(q => q.date === todayKey()).length;
 }
@@ -251,14 +273,14 @@ function updateMainUI() {
   el('mainScore').textContent = score;
   const lvlSub = el('mainLevelSub');
   if(lvlSub) lvlSub.textContent = lvl.next === Infinity ? 'Maximales Level! 🎉' : `Noch ${lvl.next - score} Pts bis zum nächsten Level`;
-  const daily = dailyDoneCount();
+  const daily = dailyUsedCount();
   el('mainDailyCount').textContent = daily;
   el('mainTotalCount').textContent = completed.length;
   el('mainStreakFill').style.width = Math.min(100, (daily/10)*100) + '%';
   el('mainStreakCount').textContent = daily;
   const remaining = activeQuests.filter(Boolean).length;
   const btn = el('newQuestBtn');
-  btn.style.display = (remaining === 0 && !isLoading) ? 'flex' : 'none';
+  btn.style.display = (remaining === 0 && !isLoading && daily < 10) ? 'flex' : 'none';
   el('mainUserName').textContent = currentUser?.displayName || 'Du';
 }
 
@@ -510,7 +532,7 @@ function renderSkeleton(i) {
 
 window.loadAllQuests = async function() {
   if(isLoading) return;
-  if(dailyDoneCount()>=10){showToast('🛑 Tageslimit von 10 erreicht!');return;}
+  if(dailyUsedCount()>=10){showToast('🛑 Tageslimit von 10 erreicht!');return;}
   isLoading=true;
   lastRound=activeQuests.filter(Boolean).map(q=>q.t).concat(completed.slice(0,5).map(q=>q.title));
   activeQuests=[null,null,null,null,null];
@@ -537,24 +559,32 @@ function removeCard(i, cls, cb) {
 }
 
 function checkAllDone() {
-  if(activeQuests.filter(Boolean).length===0){
-    el('questList').innerHTML=dailyDoneCount()>=10
-      ?`<div class="limit-msg"><span class="big">🎯</span><div class="lm-title">Tageslimit erreicht!</div><p>10 Quests für heute — komm morgen wieder!</p></div>`
-      :`<div class="quest-placeholder"><span style="font-size:2rem;display:block;margin-bottom:8px">🎉</span>Alle erledigt! Bereit für 5 neue?</div>`;
-    if(dailyDoneCount()<10) el('newQuestBtn').style.display='flex';
+  const remaining = activeQuests.filter(Boolean).length;
+  const used = dailyUsedCount();
+  if(remaining === 0) {
+    if(used >= 10) {
+      el('questList').innerHTML = `<div class="limit-msg"><span class="big">🎯</span><div class="lm-title">Tageslimit erreicht!</div><p>Du hast heute 10 Quests genutzt — komm morgen wieder!</p></div>`;
+      el('newQuestBtn').style.display = 'none';
+    } else {
+      el('questList').innerHTML = `<div class="quest-placeholder"><span style="font-size:2rem;display:block;margin-bottom:8px">🎉</span>Alle erledigt! Bereit für 5 neue?<br><span style="font-size:0.72rem;color:var(--muted)">Noch ${10 - used} von 10 heute übrig</span></div>`;
+      el('newQuestBtn').style.display = 'flex';
+    }
   }
 }
 
 window.skipQuest = function(i) {
   if(!activeQuests[i]) return;
-  activeQuests[i]=null;
-  showToast('Quest übersprungen.');
-  removeCard(i,'skip-anim',checkAllDone);
+  if(dailyUsedCount() >= 10) { showToast('🛑 Tageslimit von 10 erreicht!'); return; }
+  activeQuests[i] = null;
+  incrementDailySkip();
+  updateMainUI();
+  showToast(`Quest übersprungen. Noch ${10 - dailyUsedCount()} heute übrig.`);
+  removeCard(i, 'skip-anim', checkAllDone);
 };
 
 // ── PROOF MODAL ──
 window.openProofModal = function(i) {
-  if(dailyDoneCount()>=10){showToast('🛑 Tageslimit erreicht!');return;}
+  if(dailyUsedCount()>=10){showToast('🛑 Tageslimit erreicht!');return;}
   pendingIndex=i;
   pendingPhotoFront=null; pendingPhotoBack=null;
   const q=activeQuests[i];
