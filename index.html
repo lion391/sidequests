@@ -584,7 +584,7 @@ let activeQuestIndex = -1;
 function renderQuestCard(q, i) {
   const pts = DIFF_PTS[q.diff];
   const seen = hasPrevHistory(q.t);
-  const gps = isGpsQuest(q);
+  const gps = isGpsQuest(q) || q.requiresGps; // auto-detect OR creator-flagged
   const isActive = activeQuestIndex === i;
 
   return `<div class="quest-card ${isActive ? 'quest-active' : ''}" id="card-${i}">
@@ -597,7 +597,8 @@ function renderQuestCard(q, i) {
           <span class="pts-inline pts-${q.diff}">+${pts} Pts</span>
           ${seen?`<span class="seen-badge" onclick="showQuestHistory('${q.t.replace(/'/g,"\\'")}')">📂 Verlauf</span>`:''}
           ${gps?`<span style="font-size:0.6rem;color:var(--accent3);border:1px solid var(--accent3);padding:2px 7px;border-radius:100px">🗺️ GPS</span>`:''}
-          ${q.isCommunity?`<span style="font-size:0.6rem;color:var(--wild);border:1px solid var(--wild);padding:2px 7px;border-radius:100px">✍️ Community</span>`:''}
+          ${q.isCommunity&&!q.isGlobal?`<span style="font-size:0.6rem;color:var(--wild);border:1px solid var(--wild);padding:2px 7px;border-radius:100px">✍️ Community</span>`:''}
+          ${q.isGlobal?`<span style="font-size:0.6rem;color:var(--accent3);border:1px solid var(--accent3);background:rgba(79,195,247,0.08);padding:2px 7px;border-radius:100px">🌍 Global</span>`:''}
         </div>
         <div class="quest-title">${q.t}</div>
         <div class="quest-desc">${q.d}</div>
@@ -2204,10 +2205,24 @@ window.selectCqDiff = function(diff, btn) {
 };
 
 window.openCreateCommunityQuest = function() {
-  el('cqTitle').value = ''; el('cqDesc').value = ''; el('cqEmoji').value = ''; el('cqCat').value = '';
-  el('cqDiff').value = '';
+  el('cqTitle').value=''; el('cqDesc').value=''; el('cqEmoji').value=''; el('cqCat').value='';
+  el('cqDiff').value=''; el('cqScope').value='group'; el('cqGps').checked=false;
   document.querySelectorAll('#cqDiffBtns .ai-cat-btn').forEach(b=>b.classList.remove('active'));
-  el('createCommunityQuestModal').style.display = 'flex';
+  setCqScope('group');
+  el('createCommunityQuestModal').style.display='flex';
+};
+
+window.setCqScope = function(scope) {
+  el('cqScope').value = scope;
+  el('cqScopeGroup').style.background = scope==='group' ? 'var(--accent)' : 'var(--surface)';
+  el('cqScopeGroup').style.color = scope==='group' ? 'var(--bg)' : 'var(--muted)';
+  el('cqScopeGroup').style.border = scope==='group' ? 'none' : '1px solid var(--border)';
+  el('cqScopeGlobal').style.background = scope==='global' ? 'var(--accent3)' : 'var(--surface)';
+  el('cqScopeGlobal').style.color = scope==='global' ? 'var(--bg)' : 'var(--muted)';
+  el('cqScopeGlobal').style.border = scope==='global' ? 'none' : '1px solid var(--border)';
+  el('cqScopeDesc').textContent = scope==='global'
+    ? '🌍 Dieser Quest ist für alle SideQuest-Gruppen weltweit sichtbar.'
+    : '👥 Nur Mitglieder deiner Gruppe sehen diesen Quest.';
 };
 
 window.submitCommunityQuest = async function() {
@@ -2216,6 +2231,8 @@ window.submitCommunityQuest = async function() {
   const diff = el('cqDiff').value;
   const e = el('cqEmoji').value.trim() || '⭐';
   const cat = el('cqCat').value.trim() || 'Community';
+  const scope = el('cqScope').value;
+  const requiresGps = el('cqGps').checked;
   if (!t) return showToast('Titel eingeben');
   if (!d) return showToast('Beschreibung eingeben');
   if (!diff) return showToast('Schwierigkeit wählen');
@@ -2223,18 +2240,28 @@ window.submitCommunityQuest = async function() {
   const nextWeek = getWeekNumber() + 1;
   const year = new Date().getFullYear();
 
-  await addDoc(collection(db,'community_quests'), {
-    t, d, diff, e, cat,
+  const questData = {
+    t, d, diff, e, cat, requiresGps, scope,
     createdBy: currentUser.uid,
     createdByName: currentUser.displayName || 'Anonym',
-    groupId,
-    activeFromWeek: nextWeek,
-    activeFromYear: year,
+    groupId, activeFromWeek: nextWeek, activeFromYear: year,
     createdAt: serverTimestamp()
-  });
+  };
 
-  el('createCommunityQuestModal').style.display = 'none';
-  showToast('✅ Quest eingereicht! Ab nächster Woche aktiv.');
+  await addDoc(collection(db,'community_quests'), questData);
+
+  // Also save globally if scope=global
+  if (scope === 'global') {
+    await addDoc(collection(db,'global_quests'), {
+      t, d, diff, e, cat, requiresGps,
+      createdBy: currentUser.uid,
+      createdByName: currentUser.displayName || 'Anonym',
+      createdAt: serverTimestamp()
+    });
+  }
+
+  el('createCommunityQuestModal').style.display='none';
+  showToast(`✅ Quest eingereicht! Ab nächster Woche ${scope==='global'?'weltweit':'in deiner Gruppe'} aktiv.`);
   loadCommunityTab();
 };
 
@@ -2266,6 +2293,8 @@ async function loadCommunityTab() {
           ${isActive ? '✅ Aktiv' : '⏳ Ab nächster Woche'}
         </span>
         ${isMe?`<span style="font-size:0.6rem;color:var(--accent3)">Von dir</span>`:`<span style="font-size:0.6rem;color:var(--muted)">Von ${q.createdByName}</span>`}
+        ${q.requiresGps?`<span style="font-size:0.6rem;color:var(--accent3);border:1px solid var(--accent3);padding:2px 7px;border-radius:100px">🗺️ GPS</span>`:''}
+        ${q.scope==='global'?`<span style="font-size:0.6rem;color:var(--accent3);border:1px solid var(--accent3);padding:2px 7px;border-radius:100px">🌍 Global</span>`:''}
       </div>
       <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.95rem;margin-bottom:4px">${q.e} ${q.t}</div>
       <div style="font-size:0.75rem;color:var(--muted);line-height:1.5">${q.d}</div>
@@ -2273,17 +2302,33 @@ async function loadCommunityTab() {
   }).join('');
 }
 
-// Load community quests into quest pool
+// Load community quests into quest pool (group + global)
 async function getCommunityQuestsForPool() {
   try {
     const currentWeek = getWeekNumber();
     const currentYear = new Date().getFullYear();
-    const q = query(collection(db,'community_quests'),
+
+    // Group-specific quests
+    const groupQ = query(collection(db,'community_quests'),
       where('groupId','==',groupId),
       where('activeFromWeek','<=',currentWeek),
       where('activeFromYear','==',currentYear));
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({...d.data(), isCommunity: true}));
+    const groupSnap = await getDocs(groupQ);
+    const groupQuests = groupSnap.docs.map(d => ({...d.data(), isCommunity: true}));
+
+    // Global quests from all users
+    const globalQ = query(collection(db,'global_quests'));
+    const globalSnap = await getDocs(globalQ);
+    const globalQuests = globalSnap.docs.map(d => ({...d.data(), isCommunity: true, isGlobal: true}));
+
+    // Merge, deduplicate by title
+    const all = [...groupQuests, ...globalQuests];
+    const seen = new Set();
+    return all.filter(q => {
+      if (seen.has(q.t)) return false;
+      seen.add(q.t);
+      return true;
+    });
   } catch(e) { return []; }
 }
 
@@ -2977,11 +3022,14 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
   <div class="modal-sheet">
     <div class="modal-handle"></div>
     <div class="modal-title">✍️ Quest erstellen</div>
-    <div class="modal-sub">Dein Quest wird ab nächster Woche zufällig an Mitglieder verteilt.</div>
+    <div class="modal-sub">Dein Quest wird ab nächster Woche zufällig verteilt.</div>
+
     <div style="font-size:0.78rem;color:var(--muted);margin-bottom:6px">Titel (max. 8 Wörter):</div>
     <input class="auth-input" id="cqTitle" type="text" placeholder="Kurzer, packender Titel" style="margin-bottom:10px">
+
     <div style="font-size:0.78rem;color:var(--muted);margin-bottom:6px">Beschreibung:</div>
     <textarea class="proof-notes" id="cqDesc" placeholder="Was genau muss man tun? Konkret und motivierend." rows="3"></textarea>
+
     <div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px">Schwierigkeit:</div>
     <div style="display:flex;gap:8px;margin-bottom:14px" id="cqDiffBtns">
       <button class="ai-cat-btn" onclick="selectCqDiff('easy',this)">🟢 Leicht<br><span style="font-size:0.65rem">+10 Pts</span></button>
@@ -2989,12 +3037,36 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       <button class="ai-cat-btn" onclick="selectCqDiff('hard',this)">🔴 Schwer<br><span style="font-size:0.65rem">+50 Pts</span></button>
       <button class="ai-cat-btn" onclick="selectCqDiff('wild',this)">🔥 Wild<br><span style="font-size:0.65rem">+75 Pts</span></button>
     </div>
+
     <div style="font-size:0.78rem;color:var(--muted);margin-bottom:6px">Kategorie & Emoji:</div>
     <div style="display:flex;gap:8px;margin-bottom:14px">
       <input class="auth-input" id="cqEmoji" type="text" placeholder="🎯" style="width:60px;text-align:center">
       <input class="auth-input" id="cqCat" type="text" placeholder="Kategorie (z.B. Sozial)" style="flex:1">
     </div>
+
+    <div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px">Optionen:</div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
+      <!-- GPS toggle -->
+      <label style="display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;cursor:pointer">
+        <input type="checkbox" id="cqGps" style="width:18px;height:18px;cursor:pointer">
+        <div>
+          <div style="font-size:0.82rem;font-family:'Syne',sans-serif;font-weight:700">🗺️ GPS-Quest</div>
+          <div style="font-size:0.7rem;color:var(--muted)">Person muss GPS-Tracker nutzen (z.B. "Lauf ein Herz")</div>
+        </div>
+      </label>
+      <!-- Sichtbarkeit toggle -->
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px">
+        <div style="font-size:0.82rem;font-family:'Syne',sans-serif;font-weight:700;margin-bottom:8px">🌍 Sichtbarkeit</div>
+        <div style="display:flex;gap:8px">
+          <button id="cqScopeGroup" onclick="setCqScope('group',this)" style="flex:1;padding:8px;background:var(--accent);color:var(--bg);border:none;border-radius:8px;font-family:'Syne',sans-serif;font-weight:700;font-size:0.75rem;cursor:pointer">👥 Nur Gruppe</button>
+          <button id="cqScopeGlobal" onclick="setCqScope('global',this)" style="flex:1;padding:8px;background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:8px;font-family:'Syne',sans-serif;font-weight:700;font-size:0.75rem;cursor:pointer">🌍 Global</button>
+        </div>
+        <div style="font-size:0.68rem;color:var(--muted);margin-top:6px" id="cqScopeDesc">Nur Mitglieder deiner Gruppe sehen diesen Quest.</div>
+      </div>
+    </div>
+
     <input type="hidden" id="cqDiff" value="">
+    <input type="hidden" id="cqScope" value="group">
     <button class="btn-confirm" onclick="submitCommunityQuest()">✍️ Quest einreichen</button>
     <button class="btn-cancel" style="margin-top:8px" onclick="el('createCommunityQuestModal').style.display='none'">Abbrechen</button>
   </div>
