@@ -62,6 +62,7 @@ function showTab(id) {
   if (id === 'feed') loadFeed();
   if (id === 'leaderboard') loadLeaderboard();
   if (id === 'challenges') loadChallengesTab();
+  if (id === 'fitness') loadFitnessTab();
 }
 window.showTab = showTab;
 window.showToast = showToast;
@@ -1689,6 +1690,9 @@ window.gpsStart = function() {
         if (dist < 0.005) return; // filter noise < 5m
         gpsTotalDistance += dist;
         el('gpsDistance').textContent = gpsTotalDistance.toFixed(2);
+        if (gpsMode === 'fitness') {
+          el('gpsPtsPreview').textContent = `+${Math.floor(gpsTotalDistance * 10)} Pts`;
+        }
       }
       gpsPoints.push(pt);
       gpsDrawRoute();
@@ -1704,72 +1708,219 @@ window.gpsPause = function() {
   el('gpsStatus').textContent = gpsPaused ? '⏸ Pausiert' : '📍 Tracking läuft...';
 };
 
+// gpsMode: 'quest' | 'fitness'
+let gpsMode = 'quest';
+
 window.gpsStop = function() {
   if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
   gpsRunning = false;
   el('gpsPauseBtn').style.display = 'none';
   el('gpsStopBtn').style.display = 'none';
   el('gpsStatus').textContent = `✅ Fertig — ${gpsTotalDistance.toFixed(2)} km`;
-  if (gpsPoints.length > 1) el('gpsUseBtn').style.display = 'block';
+  if (gpsPoints.length > 1) {
+    if (gpsMode === 'quest') {
+      el('gpsUseBtn').style.display = 'block';
+    } else {
+      const pts = Math.floor(gpsTotalDistance * 10);
+      el('gpsPtsPreview').textContent = `+${pts} Punkte (${gpsTotalDistance.toFixed(2)} km × 10)`;
+      el('gpsSaveFitnessBtn').style.display = 'block';
+    }
+  }
 };
 
-window.gpsUseAsProof = function() {
+function buildRouteImage() {
   gpsDrawRoute();
   const canvas = el('gpsCanvas');
   const ctx = canvas.getContext('2d');
-  // Distance overlay — no coordinates
-  ctx.fillStyle = 'rgba(13,13,15,0.75)';
-  ctx.beginPath(); ctx.roundRect(10, 10, 155, 46, 8); ctx.fill();
+  ctx.fillStyle = 'rgba(13,13,15,0.8)';
+  ctx.beginPath(); ctx.roundRect(10, 10, 160, 46, 8); ctx.fill();
   ctx.fillStyle = '#c8f135';
   ctx.font = 'bold 24px sans-serif';
   ctx.fillText(`${gpsTotalDistance.toFixed(2)} km`, 18, 40);
-  pendingPhotoBack = canvas.toDataURL('image/png');
+  return canvas.toDataURL('image/png');
+}
+
+window.gpsUseAsProof = function() {
+  pendingPhotoBack = buildRouteImage();
   pendingPhotoFront = null;
   el('gpsModal').style.display = 'none';
   el('proofModal').style.display = 'flex';
   el('photoPlaceholder').style.display = 'none';
   el('beRealResult').src = pendingPhotoBack;
   el('beRealResult').style.display = 'block';
-  showToast(`🗺️ ${gpsTotalDistance.toFixed(2)} km als Beweis gespeichert!`);
+  const questIdx = parseInt(el('gpsModal').dataset.questIdx);
+  if (!isNaN(questIdx) && questIdx >= 0) openProofModal(questIdx);
+  showToast(`🗺️ ${gpsTotalDistance.toFixed(2)} km als Beweis!`);
+};
+
+window.gpsSaveAsFitness = async function() {
+  const km = gpsTotalDistance;
+  const pts = Math.floor(km * 10);
+  const routeImage = buildRouteImage();
+  const date = todayKey();
+  const week = getWeekNumber();
+  const year = new Date().getFullYear();
+
+  // Upload route image to Cloudinary
+  let photoUrl = null;
+  try { photoUrl = await uploadToCloudinary(routeImage, 'fitness'); } catch(e) {}
+
+  // Save run to Firestore
+  await addDoc(collection(db,'fitness_runs'), {
+    userId: currentUser.uid,
+    userName: currentUser.displayName || 'Anonym',
+    groupId,
+    km,
+    pts,
+    photoUrl,
+    date,
+    week,
+    year,
+    createdAt: serverTimestamp()
+  });
+
+  // Award points
+  score += pts;
+  saveLocalProgress();
+  await updateDoc(doc(db,'users',currentUser.uid), { score: increment(pts) });
+
+  el('gpsModal').style.display = 'none';
+  updateMainUI();
+  showToast(`🏃 +${pts} Punkte für ${km.toFixed(2)} km!`, 3000);
+  showTab('fitness');
+  loadFitnessTab();
 };
 
 window.gpsCancel = function() {
   if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
   el('gpsModal').style.display = 'none';
-  // If came from a quest start, go back to quest list
-  if (activeQuestIndex >= 0) {
-    // just close, quest stays active
-  } else {
+  if (gpsMode === 'quest' && activeQuestIndex < 0) {
     el('proofModal').style.display = 'flex';
   }
 };
 
 window.startQuestGps = function(i) {
   activeQuestIndex = i;
-  // Re-render card to show active state
   const card = el('card-' + i);
   if (card) card.outerHTML = renderQuestCard(activeQuests[i], i);
-  openGpsTracker(i);
+  openFitnessTrackerInner('quest', i);
 };
 
-// Override openGpsTracker to accept optional quest index
-const _origOpenGps = window.openGpsTracker;
-window.openGpsTracker = function(questIdx) {
-  _origOpenGps();
-  // Store whether we came from a quest start or proof modal
-  el('gpsModal').dataset.fromQuest = questIdx !== undefined ? '1' : '0';
-  el('gpsModal').dataset.questIdx = questIdx !== undefined ? questIdx : '';
-};
+window.openGpsTracker = function() { openFitnessTrackerInner('quest', -1); };
+window.openFitnessTracker = function() { openFitnessTrackerInner('fitness', -1); };
 
-// Override gpsUseAsProof to open proof modal for the right quest
-const _origUseAsProof = window.gpsUseAsProof;
-window.gpsUseAsProof = function() {
-  _origUseAsProof();
-  // If started from a quest, open proof modal for that quest
-  const questIdx = parseInt(el('gpsModal').dataset.questIdx);
-  if (!isNaN(questIdx) && questIdx >= 0) {
-    openProofModal(questIdx);
+function openFitnessTrackerInner(mode, questIdx) {
+  gpsMode = mode;
+  gpsPoints = []; gpsTotalDistance = 0; gpsRunning = false; gpsPaused = false; gpsWatchId = null;
+  el('gpsDistance').textContent = '0.00';
+  el('gpsPtsPreview').textContent = '';
+  el('gpsStatus').textContent = 'Bereit zum Starten';
+  el('gpsEmptyMsg').style.display = 'flex';
+  el('gpsStartBtn').style.display = 'flex';
+  el('gpsPauseBtn').style.display = 'none';
+  el('gpsStopBtn').style.display = 'none';
+  el('gpsUseBtn').style.display = 'none';
+  el('gpsSaveFitnessBtn').style.display = 'none';
+  el('gpsCanvas').getContext('2d').clearRect(0,0,400,240);
+  el('gpsModal').dataset.questIdx = questIdx >= 0 ? questIdx : '';
+  el('gpsModalTitle').textContent = mode === 'fitness' ? '🏃 Lauf Tracker' : '🗺️ GPS Tracker';
+  if (mode === 'quest') el('proofModal').style.display = 'none';
+  el('gpsModal').style.display = 'flex';
+}
+
+// ── FITNESS TAB ──
+async function loadFitnessTab() {
+  const week = getWeekNumber();
+  const year = new Date().getFullYear();
+
+  // My runs this week
+  const myQ = query(collection(db,'fitness_runs'),
+    where('userId','==',currentUser.uid),
+    where('groupId','==',groupId),
+    where('week','==',week),
+    where('year','==',year));
+  const mySnap = await getDocs(myQ);
+  const myKm = mySnap.docs.reduce((s,d)=>s+(d.data().km||0),0);
+  const myPts = mySnap.docs.reduce((s,d)=>s+(d.data().pts||0),0);
+  el('fitnessWeekKm').textContent = myKm.toFixed(2);
+  el('fitnessWeekPts').textContent = myPts;
+
+  // Group leaderboard this week
+  const gDoc = await getDoc(doc(db,'groups',groupId));
+  const members = gDoc.data().members || [];
+  const memberStats = [];
+  for (const uid of members) {
+    const uDoc = await getDoc(doc(db,'users',uid));
+    const q2 = query(collection(db,'fitness_runs'),
+      where('userId','==',uid), where('groupId','==',groupId),
+      where('week','==',week), where('year','==',year));
+    const snap2 = await getDocs(q2);
+    const km = snap2.docs.reduce((s,d)=>s+(d.data().km||0),0);
+    memberStats.push({ uid, name: uDoc.exists()?uDoc.data().name:'Anonym', km });
   }
+  memberStats.sort((a,b)=>b.km-a.km);
+
+  // Check if I'm in the lead
+  const daysLeft = 7 - new Date().getDay() || 7;
+  if (memberStats.length > 1) {
+    el('fitnessWeekInfo').textContent = memberStats[0].uid === currentUser.uid
+      ? `🥇 Du führst! Noch ${daysLeft} Tage bis zu den +100 Bonuspunkten.`
+      : `🏃 ${memberStats[0].name} führt mit ${memberStats[0].km.toFixed(2)} km. Noch ${daysLeft} Tage!`;
+  }
+
+  const medals = ['🥇','🥈','🥉'];
+  el('fitnessLeaderboard').innerHTML = memberStats.map((m,i) => `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px 16px;display:flex;align-items:center;gap:12px;margin-bottom:8px${m.uid===currentUser.uid?';border-color:var(--accent)':''}">
+      <div style="font-size:1.2rem;min-width:28px">${medals[i]||i+1}</div>
+      <div style="flex:1">
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.9rem">${m.name}${m.uid===currentUser.uid?' (Du)':''}</div>
+        <div style="font-size:0.7rem;color:var(--muted)">${m.km.toFixed(2)} km diese Woche</div>
+      </div>
+      <div style="font-family:'Syne',sans-serif;font-weight:800;color:var(--accent)">${m.km.toFixed(1)}<span style="font-size:0.65rem;color:var(--muted);font-weight:400"> km</span></div>
+    </div>`).join('');
+
+  // My past runs
+  const allMyQ = query(collection(db,'fitness_runs'),
+    where('userId','==',currentUser.uid),
+    where('groupId','==',groupId),
+    orderBy('createdAt','desc'));
+  const allMySnap = await getDocs(allMyQ);
+  el('fitnessRunList').innerHTML = allMySnap.docs.slice(0,10).map(d => {
+    const r = d.data();
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:10px;cursor:pointer" onclick="showRunDetail('${d.id}')">
+      ${r.photoUrl ? `<img src="${r.photoUrl}" style="width:100%;max-height:160px;object-fit:cover">` : ''}
+      <div style="padding:12px 14px;display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-family:'Syne',sans-serif;font-weight:700">${r.km.toFixed(2)} km</div>
+          <div style="font-size:0.7rem;color:var(--muted)">${r.date}</div>
+        </div>
+        <div style="font-family:'Syne',sans-serif;font-weight:800;color:var(--accent)">+${r.pts} Pts</div>
+      </div>
+    </div>`;
+  }).join('') || '<div style="text-align:center;padding:20px;color:var(--muted);font-size:0.8rem">Noch keine Läufe gespeichert</div>';
+
+  // Check if bonus already awarded this week
+  checkWeeklyFitnessBonus(memberStats);
+}
+
+async function checkWeeklyFitnessBonus(memberStats) {
+  const day = new Date().getDay(); // 0=Sun
+  if (day !== 0 || memberStats.length < 2) return; // Only on Sunday
+  const bonusKey = `sq_fitness_bonus_${getWeekNumber()}_${new Date().getFullYear()}`;
+  if (localStorage.getItem(bonusKey)) return;
+  const leader = memberStats[0];
+  if (leader.uid !== currentUser.uid || leader.km === 0) return;
+  // I'm the leader on Sunday — award bonus
+  localStorage.setItem(bonusKey, '1');
+  score += 100;
+  saveLocalProgress();
+  await updateDoc(doc(db,'users',currentUser.uid), { score: increment(100) });
+  updateMainUI();
+  showToast('🏆 Wochensieger! +100 Bonuspunkte!', 4000);
+}
+
+window.showRunDetail = function(runId) {
+  // Already visible in the card — could expand later
 };
 
 window.confirmResetPoints = function() {
@@ -2120,6 +2271,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       <button class="tab-btn" id="tabBtn-feed" onclick="showTab('feed')">👥 Feed</button>
       <button class="tab-btn" id="tabBtn-leaderboard" onclick="showTab('leaderboard')">🏆 Liga</button>
       <button class="tab-btn" id="tabBtn-challenges" onclick="showTab('challenges')">⚔️ Duell</button>
+      <button class="tab-btn" id="tabBtn-fitness" onclick="showTab('fitness')">🏃 Fitness</button>
       <button class="tab-btn" id="tabBtn-history" onclick="showTab('history')">📜 Log</button>
     </div>
 
@@ -2160,6 +2312,39 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <!-- LEADERBOARD TAB -->
     <div class="tab-content" id="tab-leaderboard" style="display:none">
       <div id="leaderboardList"></div>
+    </div>
+
+    <!-- FITNESS TAB -->
+    <div class="tab-content" id="tab-fitness" style="display:none">
+
+      <!-- Start tracker button -->
+      <button class="btn-new-quest" onclick="openFitnessTracker()" style="margin-bottom:16px">
+        🏃 Lauf starten — +10 Pts / km
+      </button>
+
+      <!-- This week stats -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:14px">
+        <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:12px">Diese Woche</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+          <div style="background:var(--surface2);border-radius:12px;padding:12px">
+            <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.6rem;color:var(--accent)" id="fitnessWeekKm">0.00</div>
+            <div style="font-size:0.7rem;color:var(--muted)">km diese Woche</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:12px;padding:12px">
+            <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.6rem;color:var(--accent3)" id="fitnessWeekPts">0</div>
+            <div style="font-size:0.7rem;color:var(--muted)">Bonus-Punkte</div>
+          </div>
+        </div>
+        <div style="font-size:0.72rem;color:var(--muted)" id="fitnessWeekInfo">Wer diese Woche am meisten läuft bekommt +100 Bonuspunkte!</div>
+      </div>
+
+      <!-- Week leaderboard -->
+      <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Wochen-Rangliste 🏆</div>
+      <div id="fitnessLeaderboard"></div>
+
+      <!-- Past runs -->
+      <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin:18px 0 10px">Meine Läufe</div>
+      <div id="fitnessRunList"></div>
     </div>
 
     <!-- HISTORY TAB -->
@@ -2358,18 +2543,19 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 <div class="modal-backdrop center" id="gpsModal" style="display:none">
   <div class="modal-sheet center-modal" style="max-height:95vh">
     <div class="modal-handle"></div>
-    <div class="modal-title">🗺️ GPS Tracker</div>
+    <div class="modal-title" id="gpsModalTitle">🗺️ GPS Tracker</div>
     <div class="modal-sub" id="gpsStatus">Bereit zum Starten</div>
 
     <!-- Distance display -->
     <div style="text-align:center;margin-bottom:16px">
       <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:3rem;color:var(--accent)" id="gpsDistance">0.00</div>
       <div style="font-size:0.75rem;color:var(--muted)">Kilometer</div>
+      <div style="font-size:0.72rem;color:var(--accent3);margin-top:4px" id="gpsPtsPreview"></div>
     </div>
 
     <!-- Route canvas -->
-    <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;margin-bottom:16px;overflow:hidden;position:relative" id="gpsCanvasWrap">
-      <canvas id="gpsCanvas" width="400" height="260" style="width:100%;height:auto;display:block"></canvas>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;margin-bottom:16px;overflow:hidden;position:relative">
+      <canvas id="gpsCanvas" width="400" height="240" style="width:100%;height:auto;display:block"></canvas>
       <div id="gpsEmptyMsg" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:0.78rem;color:var(--muted)">Strecke erscheint hier</div>
     </div>
 
@@ -2379,12 +2565,12 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       <button class="btn-confirm" id="gpsPauseBtn" onclick="gpsPause()" style="flex:1;display:none;background:var(--medium)">⏸ Pause</button>
       <button class="btn-confirm" id="gpsStopBtn" onclick="gpsStop()" style="flex:1;display:none;background:var(--hard)">⏹ Stopp</button>
     </div>
-    <button class="btn-confirm" id="gpsUseBtn" onclick="gpsUseAsProof()" style="display:none;background:var(--accent3)">✅ Als Beweis verwenden</button>
+    <button class="btn-confirm" id="gpsUseBtn" onclick="gpsUseAsProof()" style="display:none;background:var(--accent3)">✅ Als Quest-Beweis</button>
+    <button class="btn-confirm" id="gpsSaveFitnessBtn" onclick="gpsSaveAsFitness()" style="display:none;margin-top:8px">🏃 Lauf speichern & Punkte kassieren</button>
     <button class="btn-cancel" style="margin-top:8px" onclick="gpsCancel()">Abbrechen</button>
   </div>
 </div>
 
 <div class="toast" id="toast"></div>
-
 </body>
 </html>
