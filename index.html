@@ -862,27 +862,27 @@ window.confirmComplete = async function() {
 
 // ── PROFILE MODAL ──
 window.openProfileModal = async function() {
-  el('profileNameInput').value = currentUser.displayName || '';
-  el('profileTotalQuests').textContent = completed.length;
-  el('profileTotalPts').textContent = score;
-  const lvl = getLevel(score);
-  el('profileLevel').textContent = lvl.icon;
-
-  // Set avatar letter
-  const letter = (currentUser.displayName || 'Du')[0].toUpperCase();
-  el('profileAvatarLetter').textContent = letter;
-
-  // Load profile photo from localStorage
-  const banner = localStorage.getItem('sq_profile_banner');
-  if (banner) {
-    el('profileBannerImg').src = banner;
-    el('profileBannerImg').style.display = 'block';
-    el('profileAvatarDefault').style.display = 'none';
-  } else {
-    el('profileBannerImg').style.display = 'none';
-    el('profileAvatarDefault').style.display = 'flex';
+  try {
+    el('profileNameInput').value = currentUser.displayName || '';
+    el('profileTotalQuests').textContent = completed.length;
+    el('profileTotalPts').textContent = score;
+    const lvl = getLevel(score);
+    el('profileLevel').textContent = lvl.icon;
+    const letter = (currentUser.displayName || 'Du')[0].toUpperCase();
+    el('profileAvatarLetter').textContent = letter;
+    const banner = localStorage.getItem('sq_profile_banner');
+    if (banner) {
+      el('profileBannerImg').src = banner;
+      el('profileBannerImg').style.display = 'block';
+      el('profileAvatarDefault').style.display = 'none';
+    } else {
+      el('profileBannerImg').style.display = 'none';
+      el('profileAvatarDefault').style.display = 'flex';
+    }
+    el('profileModal').style.display = 'flex';
+  } catch(e) {
+    showToast('Fehler: ' + e.message);
   }
-  el('profileModal').style.display = 'flex';
 };
 
 window.saveProfileName = async function() {
