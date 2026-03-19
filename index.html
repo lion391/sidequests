@@ -55,6 +55,7 @@ function showScreen(id) {
   el(id).style.display = 'block';
 }
 let currentTabId = 'quests';
+window._getCurrentTab = () => currentTabId;
 
 function showTab(id) {
   currentTabId = id;
@@ -2817,7 +2818,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <div style="display:flex;align-items:center;gap:10px">
       <div style="font-size:0.72rem;color:var(--muted)" id="mainUserName"></div>
       <div class="score-chip">🏆 <span class="pts" id="mainScore">0</span> <span style="color:var(--muted)">Pts</span></div>
-      <button onclick="showInfoFor(currentTabId)" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:1rem">ℹ️</button>
+      <button onclick="showInfoFor(window._getCurrentTab())" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:1rem">ℹ️</button>
       <button onclick="document.getElementById('settingsModal').style.display='flex';initSettings()" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:1rem">⚙️</button>
     </div>
   </div>
