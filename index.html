@@ -1339,10 +1339,10 @@ window.declineTrade = async function() {
 let guideStep=0;
 window.guideNext = function() {
   guideStep++;
-  if(guideStep>=5){localStorage.setItem('sq_guided','1');el('onboarding').style.display='none';return;}
+  if(guideStep>=7){localStorage.setItem('sq_guided','1');el('onboarding').style.display='none';return;}
   document.querySelectorAll('.guide-slide').forEach((s,i)=>s.classList.toggle('active',i===guideStep));
   document.querySelectorAll('.guide-dot').forEach((d,i)=>d.classList.toggle('active',i===guideStep));
-  el('guideNextBtn').textContent=guideStep===4?'Loslegen ⚡':'Weiter →';
+  el('guideNextBtn').textContent=guideStep===6?'Loslegen ⚡':'Weiter →';
 };
 
 // ── SEASONAL QUEST FILTERING ──
@@ -1957,8 +1957,10 @@ async function checkWeeklyFitnessBonus(memberStats) {
   const bonusKey = `sq_fitness_bonus_${getWeekNumber()}_${new Date().getFullYear()}`;
   if (localStorage.getItem(bonusKey)) return;
   const leader = memberStats[0];
-  if (leader.uid !== currentUser.uid || leader.km === 0) return;
-  // I'm the leader on Sunday — award bonus
+  // Only award if leader has actually run something this week
+  if (leader.km <= 0) return;
+  if (leader.uid !== currentUser.uid) return;
+  // I'm the leader on Sunday with > 0 km — award bonus
   localStorage.setItem(bonusKey, '1');
   score += 100;
   saveLocalProgress();
@@ -2514,31 +2516,41 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <div class="guide-slide active" id="slide-0">
       <div class="guide-emoji">⚡</div>
       <div class="guide-title">Willkommen bei SideQuest</div>
-      <div class="guide-text">Die App die dich vom Handy wegbringt — echte Erlebnisse, echte Freunde, echte Momente.</div>
+      <div class="guide-text">SideQuest bringt dich vom Handy weg — mit echten Aufgaben, echten Erlebnissen und einem gesunden Wettkampf mit Freunden.</div>
     </div>
     <div class="guide-slide" id="slide-1">
       <div class="guide-emoji">🎯</div>
-      <div class="guide-title">5 Quests gleichzeitig</div>
-      <div class="guide-text">Immer 5 Aufgaben auf einmal. Erledig was du kannst — max. 10 pro Tag.</div>
+      <div class="guide-title">Deine täglichen Quests</div>
+      <div class="guide-text">Du bekommst 5 zufällige Quests — von "Geh 10 Minuten spazieren" bis "Sprich einen Fremden an". Du hast 10 Slots pro Tag: erledigen oder skippen, alles zählt.</div>
     </div>
     <div class="guide-slide" id="slide-2">
       <div class="guide-emoji">📸</div>
-      <div class="guide-title">BeReal-Modus</div>
-      <div class="guide-text">Beim Abschliessen kannst du ein normales Foto oder ein BeReal (Vorder + Rückseite) machen!</div>
+      <div class="guide-title">Beweisfoto & BeReal</div>
+      <div class="guide-text">Beim Abschliessen kannst du ein normales Foto machen oder den BeReal-Modus nutzen — der macht gleichzeitig ein Foto mit Vorder- und Rückkamera. Als Beweis, dass du wirklich dabei warst!</div>
     </div>
     <div class="guide-slide" id="slide-3">
-      <div class="guide-emoji">👥</div>
-      <div class="guide-title">Freunde & Rangliste</div>
-      <div class="guide-text">Sieh was deine Freunde heute erledigt haben, reagiere mit Fotos — und kämpfe um den 1. Platz!</div>
+      <div class="guide-emoji">⚔️</div>
+      <div class="guide-title">Duelle & eigene Quests</div>
+      <div class="guide-text">Fordere Freunde zu einem Duell heraus — wer verliert, gibt Punkte ab. Oder erstell eigene Quests für die Gruppe: sie tauchen ab nächster Woche bei allen auf.</div>
     </div>
     <div class="guide-slide" id="slide-4">
-      <div class="guide-emoji">🏆</div>
-      <div class="guide-title">Los geht's!</div>
-      <div class="guide-text">Über 280 Quests warten. Reaktionsfotos verschwinden nach dem Ansehen. Viel Spass!</div>
+      <div class="guide-emoji">🏅</div>
+      <div class="guide-title">Monats-Rangliste</div>
+      <div class="guide-text">Jeden Monat startet die Rangliste neu. Die Gruppe legt am Anfang fest um was gespielt wird — Abendessen, Kinokarte, egal was. Der Erste gewinnt, der Letzte zahlt.</div>
+    </div>
+    <div class="guide-slide" id="slide-5">
+      <div class="guide-emoji">🏃</div>
+      <div class="guide-title">Fitness & GPS</div>
+      <div class="guide-text">Im Fitness-Tab kannst du Läufe tracken — +10 Punkte pro km. Die Strecke wird als Linie gespeichert, ohne Karte oder Koordinaten. Wer pro Woche am meisten läuft, bekommt +100 Bonuspunkte.</div>
+    </div>
+    <div class="guide-slide" id="slide-6">
+      <div class="guide-emoji">👥</div>
+      <div class="guide-title">Feed & Reaktionen</div>
+      <div class="guide-text">Im Feed siehst du was Freunde heute erledigt haben. Reagiere mit einem Foto — es verschwindet nachdem die Person es gesehen hat. Los geht's!</div>
     </div>
   </div>
   <div class="guide-dots" id="guideDots">
-    <div class="guide-dot active"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div>
+    <div class="guide-dot active"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div>
   </div>
   <button class="btn-guide-next" id="guideNextBtn" onclick="guideNext()">Weiter →</button>
 </div>
