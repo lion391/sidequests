@@ -54,7 +54,10 @@ function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.style.display = 'none');
   el(id).style.display = 'block';
 }
+let currentTabId = 'quests';
+
 function showTab(id) {
+  currentTabId = id;
   document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   el('tab-' + id).style.display = 'block';
@@ -242,6 +245,8 @@ function initMain() {
   listenForChallengeBadge();
   loadWeekQuest();
   checkDuellNotifications();
+  // Fetch weather in background for quest filtering
+  fetchWeather().then(updateWeatherDisplay);
 }
 
 // ── LOCAL PROGRESS ──
@@ -531,9 +536,9 @@ function shuffle(arr) {
 
 function pickQuests() {
   const used = new Set([...lastRound, ...completed.slice(0,20).map(q=>q.title)]);
-  let pool = ALL_QUESTS.filter(q => !used.has(q.t) && isQuestSeasonal(q));
-  if(pool.length < 5) pool = ALL_QUESTS.filter(q => isQuestSeasonal(q));
-  if(pool.length < 5) pool = [...ALL_QUESTS];
+  let pool = ALL_QUESTS.filter(q => !used.has(q.t) && isQuestMatchingWeather(q));
+  if(pool.length < 5) pool = ALL_QUESTS.filter(q => isQuestMatchingWeather(q));
+  if(pool.length < 5) pool = [...ALL_QUESTS]; // fallback if weather too restrictive
   pool = shuffle(pool);
   const result=[];
   const plan = shuffle(['easy','easy','medium','medium','hard']);
@@ -614,6 +619,10 @@ window.loadAllQuests = async function() {
   const btn=el('newQuestBtn');
   btn.disabled=true; btn.innerHTML='<div class="spinner"></div> Laden...';
   el('questList').innerHTML=[0,1,2,3,4].map(i=>renderSkeleton(i)).join('');
+
+  // Fetch weather first for smart filtering
+  await fetchWeather();
+  updateWeatherDisplay();
   const picked=pickQuests();
 
   // Mix in community quests (~30% chance, max 2 slots)
@@ -1329,32 +1338,121 @@ window.guideNext = function() {
 };
 
 // ── SEASONAL QUEST FILTERING ──
+// ── WEATHER SYSTEM ──
+const WEATHER_API_KEY = '6a449a79dbd09fe2b4ee14a58b20827c';
+let currentWeather = null; // cached weather data
+
+async function fetchWeather() {
+  const cacheKey = 'sq_weather';
+  const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+  // Use cache if less than 30 min old
+  if (cached && Date.now() - cached.ts < 30 * 60 * 1000) {
+    currentWeather = cached;
+    return cached;
+  }
+  try {
+    // Get user location
+    const pos = await new Promise((res, rej) =>
+      navigator.geolocation.getCurrentPosition(res, rej, {timeout: 5000}));
+    const {latitude: lat, longitude: lon} = pos.coords;
+    const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${WEATHER_API_KEY}&units=metric&lang=de`;
+    const data = await (await fetch(url)).json();
+    const weather = {
+      ts: Date.now(),
+      temp: Math.round(data.main.temp),
+      desc: data.weather[0].description,
+      main: data.weather[0].main.toLowerCase(), // rain, snow, clear, clouds, drizzle, thunderstorm, mist
+      city: data.name,
+      wind: data.wind.speed,
+      humidity: data.main.humidity
+    };
+    localStorage.setItem(cacheKey, JSON.stringify(weather));
+    currentWeather = weather;
+    return weather;
+  } catch(e) {
+    currentWeather = null;
+    return null;
+  }
+}
+
+function getWeatherCondition() {
+  if (!currentWeather) return 'unknown';
+  const m = currentWeather.main;
+  if (m.includes('rain') || m.includes('drizzle')) return 'rain';
+  if (m.includes('snow')) return 'snow';
+  if (m.includes('thunder')) return 'storm';
+  if (m.includes('mist') || m.includes('fog')) return 'fog';
+  if (m.includes('clear')) return currentWeather.temp >= 18 ? 'sunny' : 'clear';
+  return 'cloudy';
+}
+
+function getWeatherEmoji() {
+  const c = getWeatherCondition();
+  return {rain:'🌧️', snow:'❄️', storm:'⛈️', fog:'🌫️', sunny:'☀️', clear:'🌤️', cloudy:'☁️', unknown:'🌡️'}[c] || '🌡️';
+}
+
+// What weather each quest type needs
+// 'any' = works in all weather, 'rain' = needs rain, 'sunny' = needs sun, 'snow' = needs snow, 'dry' = bad in rain
+const QUEST_WEATHER_TAGS = {
+  // Needs sunshine / warm
+  sunny: ['Kanu','SUP','Schwimm','See schwimmen','Picknick','Sonnenbaden','Grillieren','Velotour','draussen sitzen','Barfuss','Beobachte Sterne','Sonnenuntergang','Sonnenaufgang'],
+  // Only fun/makes sense in rain
+  rain: ['bei Regen raus','Regen spazieren','bei Regen joggen'],
+  // Snow specific
+  snow: ['Schnee','Schlitteln','Schneemann'],
+  // Bad in heavy rain (prefer to avoid)
+  dry: ['Velo','Wandern','Spazieren','raus gehen','draussen','im Freien','Park','Wald'],
+};
+
+function isQuestMatchingWeather(q) {
+  const text = (q.t + ' ' + q.d).toLowerCase();
+  const condition = getWeatherCondition();
+
+  // Community quests with explicit season: check season first
+  if (q.season && q.season !== 'all') {
+    if (q.season !== getCurrentSeason()) return false;
+  }
+
+  // Check if quest requires specific weather
+  const needsSun = QUEST_WEATHER_TAGS.sunny.some(kw => text.includes(kw.toLowerCase()));
+  const needsRain = QUEST_WEATHER_TAGS.rain.some(kw => text.includes(kw.toLowerCase()));
+  const needsSnow = QUEST_WEATHER_TAGS.snow.some(kw => text.includes(kw.toLowerCase()));
+  const prefersDry = QUEST_WEATHER_TAGS.dry.some(kw => text.includes(kw.toLowerCase()));
+
+  if (currentWeather === null) return true; // no weather data → show all
+
+  if (needsSun && condition !== 'sunny' && condition !== 'clear') return false;
+  if (needsRain && condition !== 'rain') return false;
+  if (needsSnow && condition !== 'snow') return false;
+  if (prefersDry && (condition === 'rain' || condition === 'storm')) return false;
+
+  // Season filter for built-in quests
+  const season = getCurrentSeason();
+  const seasonExclude = {
+    winter: ['kanu','sup','see schwimmen','velotour','fahrrad','grillen'],
+    autumn: ['kanu','sup','see schwimmen'],
+    spring: [], summer: []
+  }[season] || [];
+  if (seasonExclude.some(kw => text.includes(kw))) return false;
+
+  return true;
+}
+
 function getCurrentSeason() {
-  const m = new Date().getMonth() + 1; // 1-12
+  const m = new Date().getMonth() + 1;
   if (m >= 3 && m <= 5) return 'spring';
   if (m >= 6 && m <= 8) return 'summer';
   if (m >= 9 && m <= 11) return 'autumn';
   return 'winter';
 }
 
-// Tags that are bad in winter/cold seasons
-const SEASON_EXCLUDE = {
-  winter: ['Kanu','SUP','schwimmen im See','Schwimmen','Fahr Kanu','Velo','Velotour','Fahrrad','Baden','Grillen','Picknick im Freien'],
-  spring: [],
-  summer: [],
-  autumn: ['Kanu','SUP','schwimmen im See'],
-};
-
-function isQuestSeasonal(q) {
-  // Community quests with explicit season setting
-  if (q.season && q.season !== 'all') {
-    const seasonMap = { spring:'spring', summer:'summer', autumn:'autumn', winter:'winter' };
-    return q.season === getCurrentSeason();
+function updateWeatherDisplay() {
+  if (!currentWeather) return;
+  const existing = el('weatherBadge');
+  if (existing) {
+    existing.textContent = `${getWeatherEmoji()} ${currentWeather.temp}°C`;
+    existing.title = `${currentWeather.desc} in ${currentWeather.city}`;
   }
-  // Auto-detect for built-in quests
-  const season = getCurrentSeason();
-  const excluded = SEASON_EXCLUDE[season] || [];
-  return !excluded.some(kw => q.t.toLowerCase().includes(kw.toLowerCase()) || q.d.toLowerCase().includes(kw.toLowerCase()));
 }
 
 // ── WEEK QUEST ──
@@ -2364,7 +2462,72 @@ async function getCommunityQuestsForPool() {
   } catch(e) { return []; }
 }
 
-// ── FITNESS SETTINGS & LOCAL STORAGE ──
+// ── INFO SYSTEM ──
+const INFO_CONTENT = {
+  quests: {
+    title: '⚡ Quests — Wie es funktioniert',
+    content: `
+      <b style="color:var(--text)">🌤️ Wetter-Filter</b><br>
+      Die App kennt dein aktuelles Wetter — bei Regen kommen keine "Picknick"- oder "Kanu"-Quests, bei Schnee keine Sommersachen. Das Wetter siehst du oben im Header.<br><br>
+      <b style="color:var(--text)">Tägliche Quests</b><br>
+      Du hast 10 Slots pro Tag — erledigen oder skippen, beides zählt. Am nächsten Tag starten die Quests neu.<br><br>
+      <b style="color:var(--text)">🌟 Wochenquest</b><br>
+      Oben siehst du eine spezielle Wochenquest (Mo–So). Sie gibt bis zu 200 Punkte und ist für alle in der Gruppe gleich.<br><br>
+      <b style="color:var(--text)">⚔️ Duelle</b><br>
+      Fordere jemanden heraus — du definierst Aufgabe & Punkteinsatz. Schafft die Person es in 1 Monat nicht, bekommst du ihre Punkte.<br><br>
+      <b style="color:var(--text)">✍️ Eigene Quests</b><br>
+      Erstell Quests für die Gruppe. Mit "🌍 Global" tauchen sie bei allen SideQuest-Gruppen weltweit auf.<br><br>
+      <b style="color:var(--text)">🔄 Tauschen</b><br>
+      Mit dem 🔄-Button kannst du einen Quest an einen Freund schicken. Einmal pro Tag möglich.<br><br>
+      <b style="color:var(--text)">📸 Beweis</b><br>
+      Beim Abschliessen kannst du ein normales Foto, BeReal (Vorder+Rück) oder eine GPS-Strecke als Beweis hinzufügen.`
+  },
+  feed: {
+    title: '👥 Feed — Wie es funktioniert',
+    content: `
+      <b style="color:var(--text)">Was siehst du hier?</b><br>
+      Alle Quests die Mitglieder deiner Gruppe heute erledigt haben — mit Beweisfoto und Notizen.<br><br>
+      <b style="color:var(--text)">📸 Reaktionsfotos</b><br>
+      Tippe auf "📸 Reaktion" um ein Foto zu schiessen. Es wird der Person zugestellt und verschwindet automatisch, nachdem sie es gesehen hat — wie Snapchat.<br><br>
+      <b style="color:var(--text)">💬 Kommentare</b><br>
+      Du kannst auch einen Text-Kommentar hinterlassen — der bleibt den ganzen Tag sichtbar.<br><br>
+      <b style="color:var(--text)">🏅 Monatspreis abstimmen</b><br>
+      Oben im Feed kannst du Vorschläge für den Monatspreis machen und abstimmen. Der Gewinner der Monats-Rangliste bekommt den Preis.`
+  },
+  leaderboard: {
+    title: '🏆 Rangliste — Wie es funktioniert',
+    content: `
+      <b style="color:var(--text)">Monats-Rangliste</b><br>
+      Zeigt die gesammelten Punkte aller Gruppenmitglieder im aktuellen Monat. Resettet automatisch am 1. des Monats.<br><br>
+      <b style="color:var(--text)">🥇 Gewinner & 😬 Letzter</b><br>
+      Der Erste wird gold markiert, der Letzte rot — der Letzte muss den vereinbarten Monatspreis zahlen.<br><br>
+      <b style="color:var(--text)">🏅 Monatspreis</b><br>
+      Oben siehst du den aktuellen Preis. Klick auf "+ Preis vorschlagen" um einen Vorschlag einzureichen. Mehrheitswahl entscheidet.<br><br>
+      <b style="color:var(--text)">Punkte sammeln</b><br>
+      Leicht: +10 Pts · Mittel: +25 Pts · Schwer: +50 Pts · Wild: +75 Pts · Wochenquest: bis +200 Pts · Fitness: +10 Pts/km`
+  },
+  fitness: {
+    title: '🏃 Fitness — Wie es funktioniert',
+    content: `
+      <b style="color:var(--text)">Lauf starten</b><br>
+      Tippe auf "Lauf starten" — der GPS-Tracker zeichnet deine Strecke als Linie (keine Koordinaten werden gespeichert). Nach dem Stopp: Punkte kassieren.<br><br>
+      <b style="color:var(--text)">+10 Punkte pro km</b><br>
+      Für jeden gelaufenen Kilometer bekommst du 10 Punkte — unabhängig von den täglichen Quest-Slots.<br><br>
+      <b style="color:var(--text)">🏆 Wochensieger</b><br>
+      Wer in der Gruppe pro Woche am meisten km läuft, bekommt am Sonntag +100 Bonuspunkte. Nur wenn mindestens jemand gelaufen ist!<br><br>
+      <b style="color:var(--text)">⌚ Uhr / Garmin / Fitbit</b><br>
+      In den Einstellungen kannst du Distanzen manuell eingeben — z.B. nach einem Schwimm-Workout mit der Apple Watch.<br><br>
+      <b style="color:var(--text)">📊 Daten lokal speichern</b><br>
+      In den Einstellungen kannst du aktivieren, dass alle Läufe dauerhaft auf deinem Gerät gespeichert werden — als persönliche Statistik.`
+  }
+};
+
+window.showInfoFor = function(tabId) {
+  const info = INFO_CONTENT[tabId] || INFO_CONTENT['quests'];
+  el('infoModalTitle').textContent = info.title;
+  el('infoModalContent').innerHTML = info.content;
+  el('infoModal').style.display = 'flex';
+};
 function getFitnessSettingEnabled() {
   return localStorage.getItem('sq_save_fitness') === '1';
 }
@@ -2779,7 +2942,9 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <div class="logo">Side<span>Quest</span></div>
     <div style="display:flex;align-items:center;gap:10px">
       <div style="font-size:0.72rem;color:var(--muted)" id="mainUserName"></div>
+      <div id="weatherBadge" style="font-size:0.75rem;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:100px;padding:4px 10px;cursor:default" title="Aktuelles Wetter"></div>
       <div class="score-chip">🏆 <span class="pts" id="mainScore">0</span> <span style="color:var(--muted)">Pts</span></div>
+      <button onclick="showInfoFor(currentTabId)" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:1rem">ℹ️</button>
       <button onclick="document.getElementById('settingsModal').style.display='flex';initSettings()" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:1rem">⚙️</button>
     </div>
   </div>
@@ -3281,6 +3446,16 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     </div>
 
     <button class="btn-cancel" onclick="el('healthSyncModal').style.display='none'">Schliessen</button>
+  </div>
+</div>
+
+<!-- INFO MODAL -->
+<div class="modal-backdrop center" id="infoModal" style="display:none" onclick="if(event.target===this)this.style.display='none'">
+  <div class="modal-sheet center-modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="infoModalTitle">ℹ️ Info</div>
+    <div id="infoModalContent" style="font-size:0.82rem;color:var(--muted);line-height:1.9"></div>
+    <button class="btn-cancel" style="margin-top:20px" onclick="el('infoModal').style.display='none'">Verstanden</button>
   </div>
 </div>
 
