@@ -246,6 +246,8 @@ function initMain() {
   listenForChallengeBadge();
   loadWeekQuest();
   checkDuellNotifications();
+  fetchWeather && fetchWeather().then && null;
+  cleanupOldFeedEntries();
 }
 
 // ── LOCAL PROGRESS ──
@@ -845,6 +847,9 @@ window.confirmComplete = async function() {
     });
   } catch(e) { console.log('Firestore save error:', e); }
 
+  // Clean up yesterday's feed entries
+  cleanupOldFeedEntries();
+
   updateMainUI();
   showToast(`🎉 +${pts} Punkte!${photoUrl?' 📸':''}`, 2500);
   renderLocalHistory();
@@ -855,7 +860,33 @@ window.confirmComplete = async function() {
   pendingIndex = -1;
 };
 
-// ── LOCAL HISTORY ──
+// ── FEED CLEANUP (delete entries older than today) ──
+async function cleanupOldFeedEntries() {
+  try {
+    const today = todayKey();
+    const lastCleanup = localStorage.getItem('sq_feed_cleanup');
+    if (lastCleanup === today) return; // already cleaned today
+    localStorage.setItem('sq_feed_cleanup', today);
+
+    // Query completions in this group that are NOT from today
+    const q = query(collection(db,'completions'), where('groupId','==',groupId));
+    const snap = await getDocs(q);
+    const toDelete = snap.docs.filter(d => d.data().date !== today);
+    // Delete in batches (silently)
+    await Promise.all(toDelete.map(d => deleteDoc(doc(db,'completions',d.id))));
+  } catch(e) { /* silent */ }
+}
+
+// ── PHOTO LIGHTBOX ──
+window.openPhotoLightbox = function(src) {
+  const lb = el('photoLightbox');
+  el('lightboxImg').src = src;
+  lb.style.display = 'flex';
+};
+window.closeLightbox = function() {
+  el('photoLightbox').style.display = 'none';
+  el('lightboxImg').src = '';
+};
 function renderLocalHistory() {
   const list=el('localHistoryList');
   const title=el('localHistoryTitle');
@@ -941,7 +972,7 @@ async function loadFeed() {
           </div>
           <span class="pts-inline pts-${c.questDiff}">+${c.pts}</span>
         </div>
-        ${c.photoUrl?`<img class="feed-photo" src="${c.photoUrl}" alt="Beweis">` : ''}
+        ${c.photoUrl?`<img class="feed-photo" src="${c.photoUrl}" alt="Beweis" onclick="openPhotoLightbox('${c.photoUrl}')" style="cursor:zoom-in">` : ''}
         ${c.notes?`<div class="feed-note">"${c.notes}"</div>`:''}
         <div class="feed-reactions" id="reactions-${d.id}"></div>
         ${isMe ? '' : `<div class="feed-react-bar">
@@ -3415,6 +3446,12 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       Nein danke
     </button>
   </div>
+</div>
+
+<!-- PHOTO LIGHTBOX -->
+<div id="photoLightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:9999;align-items:center;justify-content:center;flex-direction:column" onclick="closeLightbox()">
+  <img id="lightboxImg" style="max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px">
+  <div style="color:rgba(255,255,255,0.4);font-size:0.75rem;margin-top:12px">Tippen zum Schliessen</div>
 </div>
 
 <div class="toast" id="toast"></div>
