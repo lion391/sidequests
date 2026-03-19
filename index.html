@@ -2392,53 +2392,57 @@ const INFO_CONTENT = {
     title: '⚡ Quests — Wie es funktioniert',
     content: `
       <b style="color:var(--text)">Tägliche Quests</b><br>
-      Du hast 10 Slots pro Tag — erledigen oder skippen, beides zählt. Am nächsten Tag starten die Quests neu.<br><br>
+      Du bekommst 5 zufällige Aufgaben pro Tag. Du hast 10 Slots — erledigen oder skippen, beides zählt. Am nächsten Tag werden alle nicht erledigten Quests gelöscht und du startest neu.<br><br>
       <b style="color:var(--text)">🌟 Wochenquest</b><br>
-      Oben siehst du eine spezielle Wochenquest (Mo–So). Sie gibt bis zu 200 Punkte und ist für alle in der Gruppe gleich.<br><br>
+      Ganz oben siehst du eine Wochenquest (Mo–So) — für alle in der Gruppe gleich. Bis zu 200 Punkte.<br><br>
       <b style="color:var(--text)">⚔️ Duelle</b><br>
-      Fordere jemanden heraus — du definierst Aufgabe & Punkteinsatz. Schafft die Person es in 1 Monat nicht, bekommst du ihre Punkte.<br><br>
-      <b style="color:var(--text)">✍️ Eigene Quests</b><br>
-      Erstell Quests für die Gruppe. Mit "🌍 Global" tauchen sie bei allen SideQuest-Gruppen weltweit auf.<br><br>
+      Klappe "Duelle" auf — fordere jemanden heraus mit Aufgabe & Punkteinsatz. 1 Monat Zeit. Scheitert die Person, bekommst du ihre Punkte.<br><br>
+      <b style="color:var(--text)">✍️ Eigene Quests erstellen</b><br>
+      Klappe "Eigene Quests erstellen" auf — erstell Quests mit Kategorie, Schwierigkeit und Jahreszeit. Wähle "Nur Gruppe" oder "🌍 Global" (sichtbar für alle SideQuest-Gruppen weltweit).<br><br>
       <b style="color:var(--text)">🔄 Tauschen</b><br>
-      Mit dem 🔄-Button kannst du einen Quest an einen Freund schicken. Einmal pro Tag möglich.<br><br>
-      <b style="color:var(--text)">📸 Beweis</b><br>
-      Beim Abschliessen kannst du ein normales Foto, BeReal (Vorder+Rück) oder eine GPS-Strecke als Beweis hinzufügen.`
+      Mit dem 🔄-Button schickst du einen Quest an einen Freund. Einmal pro Tag möglich.<br><br>
+      <b style="color:var(--text)">🗺️ GPS-Quests</b><br>
+      Bei Lauf- und Wander-Quests erscheint ein ▶ Start Button — der GPS-Tracker zeichnet deine Strecke als anonyme Linie. Keine Koordinaten werden gespeichert.<br><br>
+      <b style="color:var(--text)">📸 Beweisfoto</b><br>
+      Beim Abschliessen kannst du ein normales Foto oder ein BeReal (Vorder + Rückkamera) machen.`
   },
   feed: {
     title: '👥 Feed — Wie es funktioniert',
     content: `
       <b style="color:var(--text)">Was siehst du hier?</b><br>
-      Alle Quests die Mitglieder deiner Gruppe heute erledigt haben — mit Beweisfoto und Notizen.<br><br>
+      Alle Quests die du und deine Gruppe heute erledigt haben — mit Beweisfoto und Notizen. Am Ende des Tages wird der Feed automatisch geleert.<br><br>
+      <b style="color:var(--text)">🔍 Fotos anschauen</b><br>
+      Tippe auf ein Beweisfoto um es im Vollbild zu sehen.<br><br>
       <b style="color:var(--text)">📸 Reaktionsfotos</b><br>
-      Tippe auf "📸 Reaktion" um ein Foto zu schiessen. Es wird der Person zugestellt und verschwindet automatisch, nachdem sie es gesehen hat — wie Snapchat.<br><br>
+      Tippe bei fremden Einträgen auf "📸 Reaktion" — dein Foto wird der Person zugestellt und verschwindet nachdem sie es gesehen hat.<br><br>
       <b style="color:var(--text)">💬 Kommentare</b><br>
-      Du kannst auch einen Text-Kommentar hinterlassen — der bleibt den ganzen Tag sichtbar.<br><br>
-      <b style="color:var(--text)">🏅 Monatspreis abstimmen</b><br>
-      Oben im Feed kannst du Vorschläge für den Monatspreis machen und abstimmen. Der Gewinner der Monats-Rangliste bekommt den Preis.`
+      Text-Kommentare bleiben den ganzen Tag sichtbar.<br><br>
+      <b style="color:var(--text)">🏅 Monatspreis</b><br>
+      Oben im Feed kannst du einen Monatspreis vorschlagen und abstimmen. Mehrheit entscheidet.`
   },
   leaderboard: {
     title: '🏆 Rangliste — Wie es funktioniert',
     content: `
       <b style="color:var(--text)">Monats-Rangliste</b><br>
-      Zeigt die gesammelten Punkte aller Gruppenmitglieder im aktuellen Monat. Resettet automatisch am 1. des Monats.<br><br>
-      <b style="color:var(--text)">🥇 Gewinner & 😬 Letzter</b><br>
-      Der Erste wird gold markiert, der Letzte rot — der Letzte muss den vereinbarten Monatspreis zahlen.<br><br>
-      <b style="color:var(--text)">🏅 Monatspreis</b><br>
-      Oben siehst du den aktuellen Preis. Klick auf "+ Preis vorschlagen" um einen Vorschlag einzureichen. Mehrheitswahl entscheidet.<br><br>
-      <b style="color:var(--text)">Punkte sammeln</b><br>
-      Leicht: +10 Pts · Mittel: +25 Pts · Schwer: +50 Pts · Wild: +75 Pts · Wochenquest: bis +200 Pts · Fitness: +10 Pts/km`
+      Zeigt die Punkte aller Gruppenmitglieder im aktuellen Monat. Resettet automatisch am 1. des Monats.<br><br>
+      <b style="color:var(--text)">🥇 Erster & 😬 Letzter</b><br>
+      Der Erste ist gold, der Letzte rot. Der Letzte zahlt den vereinbarten Monatspreis an den Ersten.<br><br>
+      <b style="color:var(--text)">🏅 Monatspreis festlegen</b><br>
+      Klicke auf "+ Preis vorschlagen" — alle stimmen ab, die Mehrheit gewinnt.<br><br>
+      <b style="color:var(--text)">Punkte</b><br>
+      🟢 Leicht +10 · 🟡 Mittel +25 · 🔴 Schwer +50 · 🔥 Wild +75 · 🌟 Wochenquest bis +200 · 🏃 Fitness +10/km`
   },
   fitness: {
     title: '🏃 Fitness — Wie es funktioniert',
     content: `
       <b style="color:var(--text)">Lauf starten</b><br>
-      Tippe auf "Lauf starten" — der GPS-Tracker zeichnet deine Strecke als Linie (keine Koordinaten werden gespeichert). Nach dem Stopp: Punkte kassieren.<br><br>
+      Tippe auf "Lauf starten" — GPS trackt deine Strecke als Linie ohne Koordinaten. Nach dem Stopp Punkte kassieren.<br><br>
       <b style="color:var(--text)">+10 Punkte pro km</b><br>
-      Für jeden gelaufenen Kilometer bekommst du 10 Punkte — unabhängig von den täglichen Quest-Slots.<br><br>
+      Läufe zählen zusätzlich zu deinen täglichen Quests — unbegrenzt.<br><br>
       <b style="color:var(--text)">🏆 Wochensieger</b><br>
-      Wer in der Gruppe pro Woche am meisten km läuft, bekommt am Sonntag +100 Bonuspunkte. Nur wenn mindestens jemand gelaufen ist!<br><br>
-      <b style="color:var(--text)">📊 Daten lokal speichern</b><br>
-      In den Einstellungen kannst du aktivieren, dass alle Läufe dauerhaft auf deinem Gerät gespeichert werden — als persönliche Statistik.`
+      Wer diese Woche am meisten km läuft bekommt am Sonntag +100 Bonuspunkte — aber nur wenn mindestens jemand gelaufen ist.<br><br>
+      <b style="color:var(--text)">📊 Läufe speichern</b><br>
+      In den Einstellungen kannst du aktivieren, dass deine Läufe dauerhaft lokal gespeichert werden.`
   }
 };
 
@@ -2708,47 +2712,47 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <div class="guide-slide active" id="slide-0">
       <div class="guide-emoji">⚡</div>
       <div class="guide-title">Willkommen bei SideQuest</div>
-      <div class="guide-text">SideQuest bringt dich vom Handy weg — mit echten Aufgaben, echten Erlebnissen und einem gesunden Wettkampf mit Freunden. Hier ist alles was du wissen musst.</div>
+      <div class="guide-text">SideQuest bringt dich vom Handy weg — mit echten Aufgaben, echten Erlebnissen und einem gesunden Wettkampf mit Freunden.</div>
     </div>
     <div class="guide-slide" id="slide-1">
       <div class="guide-emoji">🎯</div>
       <div class="guide-title">Tägliche Quests</div>
-      <div class="guide-text">Du bekommst 5 zufällige Aufgaben pro Tag. Max. 10 Slots: erledigen oder skippen, beides zählt. Am nächsten Tag starten die Quests neu — nicht erledigte werden gelöscht.</div>
+      <div class="guide-text">Du bekommst 5 zufällige Aufgaben pro Tag — max. 10 Slots: erledigen oder skippen, beides zählt. Nicht erledigte Quests werden am nächsten Tag automatisch gelöscht.</div>
     </div>
     <div class="guide-slide" id="slide-2">
       <div class="guide-emoji">📸</div>
       <div class="guide-title">Beweisfoto & BeReal</div>
-      <div class="guide-text">Beim Abschliessen machst du ein Beweisfoto — normal oder im BeReal-Modus (Vorder + Rückkamera). Freunde sehen es im Feed und können mit einem Reaktionsfoto antworten — das verschwindet nach dem Ansehen.</div>
+      <div class="guide-text">Beim Abschliessen machst du ein Foto — normal oder BeReal (Vorder + Rückkamera gleichzeitig). Im Feed sehen es deine Freunde. Tippe auf ein Foto um es im Vollbild zu sehen.</div>
     </div>
     <div class="guide-slide" id="slide-3">
       <div class="guide-emoji">🗺️</div>
-      <div class="guide-title">GPS & Fitness</div>
-      <div class="guide-text">Beim Laufen oder Wandern kannst du den GPS-Tracker nutzen — er zeichnet die Strecke als Linie ohne Koordinaten. +10 Pts/km, Wochenrangliste, +100 Bonus für den Wochensieger. </div>
+      <div class="guide-title">GPS bei Lauf-Quests</div>
+      <div class="guide-text">Bei Lauf-, Wander- oder Velo-Quests erscheint ein ▶ Start Button. Der GPS-Tracker zeichnet deine Strecke als anonyme Linie — keine Koordinaten, kein Tempo, kein Ort gespeichert.</div>
     </div>
     <div class="guide-slide" id="slide-4">
       <div class="guide-emoji">⚔️</div>
-      <div class="guide-title">Duelle</div>
-      <div class="guide-text">Fordere jemanden zu einem Duell heraus — du definierst Aufgabe und Punkteinsatz. Schafft die Person es in einem Monat, bekommt sie deine Punkte. Scheitert sie, bekommst du ihre. Unter "Duelle" im Quests-Tab.</div>
+      <div class="guide-title">Duelle & eigene Quests</div>
+      <div class="guide-text">Im Quests-Tab findest du zwei Unterordner: "Duelle" — fordere Freunde heraus mit Punkteinsatz. "Eigene Quests" — erstell Aufgaben für die Gruppe oder global für alle SideQuest-Gruppen weltweit.</div>
     </div>
     <div class="guide-slide" id="slide-5">
-      <div class="guide-emoji">✍️</div>
-      <div class="guide-title">Eigene Quests erstellen</div>
-      <div class="guide-text">Erstell eigene Quests mit Kategorie, Schwierigkeit, Jahreszeit und GPS-Option. "Nur Gruppe" oder "🌍 Global" — globale Quests tauchen bei allen SideQuest-Gruppen weltweit auf und vergrössern den Pool für alle.</div>
+      <div class="guide-emoji">👥</div>
+      <div class="guide-title">Feed & Reaktionen</div>
+      <div class="guide-text">Im Feed siehst du was du und deine Gruppe heute erledigt haben. Reagiere mit einem Snapchat-Foto — es verschwindet nach dem Ansehen. Der Feed wird täglich um Mitternacht geleert.</div>
     </div>
     <div class="guide-slide" id="slide-6">
       <div class="guide-emoji">🏅</div>
       <div class="guide-title">Monats-Rangliste & Preis</div>
-      <div class="guide-text">Die Rangliste resettet jeden Monat. Im Feed stimmt die Gruppe ab um was gespielt wird — Abendessen, Kinokarte, egal. Erster gewinnt, Letzter zahlt.</div>
+      <div class="guide-text">Die Rangliste resettet jeden Monat. Stimmt im Feed oder der Rangliste ab um was gespielt wird — Abendessen, Kinokarte, was auch immer. Erster gewinnt, Letzter zahlt.</div>
     </div>
     <div class="guide-slide" id="slide-7">
-      <div class="guide-emoji">🌟</div>
-      <div class="guide-title">Wochenquest & Tausch</div>
-      <div class="guide-text">Im Quests-Tab siehst du oben immer eine Wochenquest — bis zu 200 Punkte! Mit dem 🔄-Button kannst du einen Quest an einen Freund tauschen (einmal pro Tag).</div>
+      <div class="guide-emoji">🏃</div>
+      <div class="guide-title">Fitness & Wochensieger</div>
+      <div class="guide-text">Im Fitness-Tab: Läufe tracken und +10 Pts pro km sammeln — zusätzlich zu deinen Quests. Wer diese Woche am meisten läuft bekommt am Sonntag +100 Bonuspunkte.</div>
     </div>
     <div class="guide-slide" id="slide-8">
-      <div class="guide-emoji">👥</div>
-      <div class="guide-title">Mehrere Gruppen & Los!</div>
-      <div class="guide-text">Du kannst in mehreren Gruppen gleichzeitig sein — jede Gruppe hat ihre eigenen Quests. In den Einstellungen einfach wechseln. Über 280 Quests warten! 🚀</div>
+      <div class="guide-emoji">🌟</div>
+      <div class="guide-title">Los geht's!</div>
+      <div class="guide-text">Wochenquest oben im Tab gibt bis zu 200 Punkte. Mit 🔄 kannst du Quests an Freunde tauschen. Das ℹ️ Icon oben zeigt dir jederzeit Hilfe zum aktuellen Tab.</div>
     </div>
   </div>
   <div class="guide-dots" id="guideDots">
