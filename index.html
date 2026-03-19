@@ -71,8 +71,6 @@ window.showTab = showTab;
 window.showToast = showToast;
 window.el = el;
 window.showGroupScreen = showGroupScreen;
-window.openProfileModal = openProfileModal;
-window.saveProfileName = saveProfileName;
 
 // ── UPLOAD TO CLOUDINARY ──
 async function uploadToCloudinary(dataUrl, folder='proofs') {
@@ -2879,8 +2877,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 
   <div class="main-body">
     <!-- Profile / Level row -->
-    <button onclick="openProfileModal()" style="width:100%;background:transparent;border:none;padding:0;cursor:pointer;text-align:left;margin-bottom:10px">
-    <div class="level-display" style="margin-bottom:0">
+    <div class="level-display" onclick="openProfileModal()" style="cursor:pointer;margin-bottom:10px">
       <div class="level-icon" id="mainLevelIcon">🥚</div>
       <div class="level-info" style="flex:1">
         <div style="display:flex;align-items:center;gap:8px">
@@ -2891,7 +2888,6 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       </div>
       <div style="font-size:0.75rem;color:var(--muted)">›</div>
     </div>
-    </button>
 
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px 16px;margin-bottom:14px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
