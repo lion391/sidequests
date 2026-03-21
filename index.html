@@ -1157,7 +1157,8 @@ async function loadReactions(completionId) {
       const r=d.data();
       const isMyReaction=r.userId===currentUser.uid;
       const seen=r.seenBy&&r.seenBy.includes(r.targetUserId);
-      return `<div class="reaction-item" onclick="markReactionSeen('${completionId}','${d.id}','${r.targetUserId}')">
+      const isForMe = r.targetUserId === currentUser.uid;
+      return `<div class="reaction-item" onclick="${r.photoUrl && isForMe ? `viewAndMarkReaction('${completionId}','${d.id}','${r.targetUserId}','${r.photoUrl}')` : `markReactionSeen('${completionId}','${d.id}','${r.targetUserId}')`}">
         ${r.photoUrl?`<img class="reaction-photo" src="${r.photoUrl}">` : ''}
         ${r.text?`<span class="reaction-text">${r.text}</span>`:''}
         <span class="reaction-author">${r.userName}</span>
@@ -1235,6 +1236,13 @@ window.sendComment = async function() {
   });
   closeCommentModal();
   showToast('Kommentar gesendet! 💬');
+};
+
+window.viewAndMarkReaction = function(completionId, reactionId, targetUserId, photoUrl) {
+  // Show photo fullscreen first
+  openPhotoLightbox(photoUrl);
+  // Then mark as seen (will delete after 3s via markReactionSeen)
+  markReactionSeen(completionId, reactionId, targetUserId);
 };
 
 window.markReactionSeen = async function(completionId, reactionId, targetUserId) {
