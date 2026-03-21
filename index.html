@@ -1040,9 +1040,8 @@ window.confirmComplete = async function() {
 
 // ── PHOTO LIGHTBOX ──
 window.openPhotoLightbox = function(src) {
-  const lb = el('photoLightbox');
   el('lightboxImg').src = src;
-  lb.style.display = 'flex';
+  el('photoLightbox').style.display = 'flex';
 };
 window.closeLightbox = function() {
   el('photoLightbox').style.display = 'none';
@@ -3779,6 +3778,12 @@ if ('serviceWorker' in navigator) {
     .catch(() => {});
 }
 </script>
+
+<!-- PHOTO LIGHTBOX -->
+<div id="photoLightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:9999;align-items:center;justify-content:center;flex-direction:column" onclick="closeLightbox()">
+  <img id="lightboxImg" style="max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px">
+  <div style="color:rgba(255,255,255,0.4);font-size:0.75rem;margin-top:12px">Tippen zum Schliessen</div>
+</div>
 
 <div class="toast" id="toast"></div>
 </body>
