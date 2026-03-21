@@ -1037,7 +1037,21 @@ window.confirmComplete = async function() {
   }
 };
 
-// ── PHOTO LIGHTBOX ──
+// ── FEED CLEANUP ──
+async function cleanupOldFeedEntries() {
+  if (!groupId || !currentUser) return;
+  try {
+    const today = todayKey();
+    // Get all completions for this group
+    const q = query(collection(db,'completions'), where('groupId','==',groupId));
+    const snap = await getDocs(q);
+    // Delete anything not from today
+    const toDelete = snap.docs.filter(d => (d.data().date || '') !== today);
+    if (toDelete.length === 0) return;
+    await Promise.all(toDelete.map(d => deleteDoc(doc(db,'completions',d.id))));
+    console.log(`Cleaned up ${toDelete.length} old feed entries`);
+  } catch(e) { /* silent */ }
+}
 window.openPhotoLightbox = function(src) {
   el('lightboxImg').src = src;
   el('photoLightbox').style.display = 'flex';
