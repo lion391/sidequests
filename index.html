@@ -287,6 +287,8 @@ function initMain() {
   listenForChallengeBadge();
   loadWeekQuest();
   checkDuellNotifications();
+  setTimeout(() => { try { cleanupOldFeedEntries(); } catch(e) {} }, 2000);
+  initPushNotifications();
   fetchWeather && fetchWeather().then && null;
   cleanupOldFeedEntries();
 }
@@ -1165,6 +1167,9 @@ window.sendReaction = async function() {
   closeReactionModal();
   showToast('Reaktion gesendet! 📸');
   btn.disabled=false; btn.textContent='📸 Senden';
+  // Notify the quest owner
+  sendPushToUser(pendingReactionTargetUserId, '📸 Neue Reaktion!',
+    `${currentUser.displayName||'Jemand'} hat auf deinen Quest reagiert`, 'reaction');
 };
 
 window.openCommentModal = function(completionId) {
@@ -1237,6 +1242,16 @@ async function loadLeaderboard() {
   }
 
   users.sort((a,b)=>b.displayPts-a.displayPts);
+
+  // Notify anyone we just overtook
+  const myNewRank = users.findIndex(u => u.uid === currentUser.uid);
+  if (myNewRank > 0) {
+    const overtaken = users[myNewRank - 1];
+    if (overtaken && overtaken.uid !== currentUser.uid) {
+      sendPushToUser(overtaken.uid, '🏆 Überholt!',
+        `${currentUser.displayName||'Jemand'} hat dich in der Monats-Rangliste überholt`, 'lb_overtake');
+    }
+  }
   const medals=['🥇','🥈','🥉'];
 
   if(!users.length) {
@@ -2114,6 +2129,16 @@ async function loadFitnessTab() {
   }).join('') || '<div style="text-align:center;padding:20px;color:var(--muted);font-size:0.8rem">Noch keine Läufe — sie werden nach 7 Tagen automatisch gelöscht</div>';
 
   // Check if bonus already awarded this week
+  // Notify overtaken members
+  memberStats.forEach((m, i) => {
+    if (m.uid !== currentUser.uid && i > 0) {
+      const prev = memberStats[i-1];
+      if (prev.uid === currentUser.uid) {
+        sendPushToUser(m.uid, '⚡ Überholt!',
+          `${currentUser.displayName||'Jemand'} hat dich in der Fitness-Rangliste überholt`, 'fitness_overtake');
+      }
+    }
+  });
   checkWeeklyFitnessBonus(memberStats);
 }
 
@@ -3598,34 +3623,95 @@ window.addEventListener('appinstalled', () => {
   document.getElementById('installBanner').style.display = 'none';
 });
 
-// Service Worker für Offline
+// ── PUSH NOTIFICATIONS (FCM) ──
+// Only runs if app is installed as PWA
+const VAPID_KEY = 'BKzdYlPckS91pMh_ZPz2jqWqLI1a_imsbX-wXVCqgt5YcpPpHk7UqDHJhD9J1ibulZi2Ddn8lu5R0-lDQB-U4A';
+
+let fcmMessaging = null;
+
+async function initPushNotifications() {
+  // Only proceed if running as installed PWA (standalone mode)
+  const isInstalled = window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true;
+  if (!isInstalled) return;
+  if (!('serviceWorker' in navigator) || !('Notification' in window)) return;
+
+  try {
+    // Register real service worker for FCM
+    const reg = await navigator.serviceWorker.register('/sidequests/firebase-messaging-sw.js');
+
+    // Import FCM lazily
+    const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
+    const { getMessaging, getToken, onMessage } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js');
+
+    const fcmApp = initializeApp({
+      apiKey: "AIzaSyBUiQ-p46Y_TykhjhHZL6sgfMhEURmV1hU",
+      authDomain: "sideqest-a6c82.firebaseapp.com",
+      projectId: "sideqest-a6c82",
+      storageBucket: "sideqest-a6c82.firebasestorage.app",
+      messagingSenderId: "617838511978",
+      appId: "1:617838511978:web:60456c0b4bbc30f448c713"
+    }, 'fcm-instance');
+
+    fcmMessaging = getMessaging(fcmApp);
+
+    // Request permission
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+
+    // Get FCM token and save to Firestore
+    const token = await getToken(fcmMessaging, {
+      vapidKey: VAPID_KEY,
+      serviceWorkerRegistration: reg
+    });
+    if (token && currentUser) {
+      await updateDoc(doc(db, 'users', currentUser.uid), { fcmToken: token });
+    }
+
+    // Foreground notifications
+    onMessage(fcmMessaging, payload => {
+      const { title, body } = payload.notification || {};
+      showToast(`🔔 ${title}: ${body}`, 4000);
+    });
+
+  } catch(e) {
+    console.log('Push init error:', e);
+  }
+}
+
+// Send push notification to a user via their FCM token
+async function sendPushToUser(targetUid, title, body, type) {
+  try {
+    const uDoc = await getDoc(doc(db, 'users', targetUid));
+    if (!uDoc.exists() || !uDoc.data().fcmToken) return;
+    // Save notification to Firestore — a Cloud Function would send it
+    // For now, save to a notifications collection the SW can read
+    await addDoc(collection(db, 'notifications'), {
+      toUid: targetUid,
+      fcmToken: uDoc.data().fcmToken,
+      title,
+      body,
+      type,
+      createdAt: serverTimestamp(),
+      sent: false
+    });
+  } catch(e) {}
+}
+
+// Call after leaderboard position changes
+async function checkOvertakeNotification(myOldRank, myNewRank, myName) {
+  if (myNewRank >= myOldRank) return; // not overtaken
+  // Notify the person who got overtaken
+  // (handled server-side ideally, but we can do best-effort here)
+}
+
+// Service Worker registration for offline
 if ('serviceWorker' in navigator) {
-  const swCode = `
-    const CACHE = 'sidequests-v1';
-    self.addEventListener('install', e => {
-      e.waitUntil(caches.open(CACHE).then(c => c.addAll(['/sidequests/'])));
-    });
-    self.addEventListener('fetch', e => {
-      e.respondWith(
-        fetch(e.request).catch(() => caches.match(e.request))
-      );
-    });
-  `;
-  const blob = new Blob([swCode], {type:'application/javascript'});
-  navigator.serviceWorker.register(URL.createObjectURL(blob))
-    .catch(() => {}); // Silent fail if blocked
+  navigator.serviceWorker.register('/sidequests/firebase-messaging-sw.js')
+    .catch(() => {});
 }
 </script>
 
 <div class="toast" id="toast"></div>
-<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sidequests/service-worker.js')
-      .then(r => console.log('SW registered'))
-      .catch(e => console.log('SW error', e));
-  });
-}
-</script>
 </body>
 </html>
