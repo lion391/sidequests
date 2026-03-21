@@ -1167,9 +1167,6 @@ window.sendReaction = async function() {
   closeReactionModal();
   showToast('Reaktion gesendet! 📸');
   btn.disabled=false; btn.textContent='📸 Senden';
-  // Notify the quest owner
-  sendPushToUser(pendingReactionTargetUserId, '📸 Neue Reaktion!',
-    `${currentUser.displayName||'Jemand'} hat auf deinen Quest reagiert`, 'reaction');
 };
 
 window.openCommentModal = function(completionId) {
@@ -1242,16 +1239,6 @@ async function loadLeaderboard() {
   }
 
   users.sort((a,b)=>b.displayPts-a.displayPts);
-
-  // Notify anyone we just overtook
-  const myNewRank = users.findIndex(u => u.uid === currentUser.uid);
-  if (myNewRank > 0) {
-    const overtaken = users[myNewRank - 1];
-    if (overtaken && overtaken.uid !== currentUser.uid) {
-      sendPushToUser(overtaken.uid, '🏆 Überholt!',
-        `${currentUser.displayName||'Jemand'} hat dich in der Monats-Rangliste überholt`, 'lb_overtake');
-    }
-  }
   const medals=['🥇','🥈','🥉'];
 
   if(!users.length) {
@@ -2129,16 +2116,6 @@ async function loadFitnessTab() {
   }).join('') || '<div style="text-align:center;padding:20px;color:var(--muted);font-size:0.8rem">Noch keine Läufe — sie werden nach 7 Tagen automatisch gelöscht</div>';
 
   // Check if bonus already awarded this week
-  // Notify overtaken members
-  memberStats.forEach((m, i) => {
-    if (m.uid !== currentUser.uid && i > 0) {
-      const prev = memberStats[i-1];
-      if (prev.uid === currentUser.uid) {
-        sendPushToUser(m.uid, '⚡ Überholt!',
-          `${currentUser.displayName||'Jemand'} hat dich in der Fitness-Rangliste überholt`, 'fitness_overtake');
-      }
-    }
-  });
   checkWeeklyFitnessBonus(memberStats);
 }
 
@@ -3623,89 +3600,134 @@ window.addEventListener('appinstalled', () => {
   document.getElementById('installBanner').style.display = 'none';
 });
 
-// ── PUSH NOTIFICATIONS (FCM) ──
-// Only runs if app is installed as PWA
-const VAPID_KEY = 'BKzdYlPckS91pMh_ZPz2jqWqLI1a_imsbX-wXVCqgt5YcpPpHk7UqDHJhD9J1ibulZi2Ddn8lu5R0-lDQB-U4A';
-
-let fcmMessaging = null;
-
+// ── LOKALE BENACHRICHTIGUNGEN (geplant, kein Server nötig) ──
 async function initPushNotifications() {
-  // Only proceed if running as installed PWA (standalone mode)
   const isInstalled = window.matchMedia('(display-mode: standalone)').matches
     || window.navigator.standalone === true;
   if (!isInstalled) return;
-  if (!('serviceWorker' in navigator) || !('Notification' in window)) return;
+  if (!('Notification' in window)) return;
+
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') return;
+
+  scheduleLocalNotifications();
+}
+
+function scheduleLocalNotifications() {
+  if (Notification.permission !== 'granted') return;
+
+  // Run immediately once, then every 30 minutes
+  checkAndNotify();
+  setInterval(checkAndNotify, 30 * 60 * 1000);
+}
+
+async function checkAndNotify() {
+  if (Notification.permission !== 'granted') return;
+  if (!currentUser || !groupId) return;
 
   try {
-    // Register real service worker for FCM
-    const reg = await navigator.serviceWorker.register('/sidequests/firebase-messaging-sw.js');
+    const stateKey = 'sq_notif_state';
+    const prev = JSON.parse(localStorage.getItem(stateKey) || '{}');
+    const now = {};
 
-    // Import FCM lazily
-    const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
-    const { getMessaging, getToken, onMessage } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js');
-
-    const fcmApp = initializeApp({
-      apiKey: "AIzaSyBUiQ-p46Y_TykhjhHZL6sgfMhEURmV1hU",
-      authDomain: "sideqest-a6c82.firebaseapp.com",
-      projectId: "sideqest-a6c82",
-      storageBucket: "sideqest-a6c82.firebasestorage.app",
-      messagingSenderId: "617838511978",
-      appId: "1:617838511978:web:60456c0b4bbc30f448c713"
-    }, 'fcm-instance');
-
-    fcmMessaging = getMessaging(fcmApp);
-
-    // Request permission
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') return;
-
-    // Get FCM token and save to Firestore
-    const token = await getToken(fcmMessaging, {
-      vapidKey: VAPID_KEY,
-      serviceWorkerRegistration: reg
-    });
-    if (token && currentUser) {
-      await updateDoc(doc(db, 'users', currentUser.uid), { fcmToken: token });
+    // ── Check 1: Quest progress ──
+    now.done = dailyDoneCount();
+    if (now.done !== prev.done && now.done > 0 && now.done !== prev.notifiedDone) {
+      // Only notify on milestones: 3, 5, 7, 10
+      const milestones = [3, 5, 7, 10];
+      if (milestones.includes(now.done)) {
+        new Notification('⚡ Quest-Meilenstein!', {
+          body: `${now.done} Quests heute erledigt! Noch ${10 - now.done} Slots frei.`,
+          icon: SQ_ICON, tag: 'sq-quests', vibrate: [200,100,200]
+        });
+        now.notifiedDone = now.done;
+      }
     }
 
-    // Foreground notifications
-    onMessage(fcmMessaging, payload => {
-      const { title, body } = payload.notification || {};
-      showToast(`🔔 ${title}: ${body}`, 4000);
-    });
+    // ── Check 2: Rangliste — wurden wir überholt? ──
+    const gDoc = await getDoc(doc(db,'groups',groupId));
+    const members = gDoc.data().members || [];
+    const mk = monthKey();
+    const scores = [];
+    for (const uid of members) {
+      const q = query(collection(db,'completions'),
+        where('userId','==',uid), where('groupId','==',groupId));
+      const snap = await getDocs(q);
+      const pts = snap.docs.filter(d=>d.data().date?.startsWith(mk))
+        .reduce((s,d)=>s+(d.data().pts||0),0);
+      const uDoc = await getDoc(doc(db,'users',uid));
+      scores.push({ uid, name: uDoc.exists()?uDoc.data().name:'Anonym', pts });
+    }
+    scores.sort((a,b)=>b.pts-a.pts);
+    const myRank = scores.findIndex(s=>s.uid===currentUser.uid) + 1;
+    now.rank = myRank;
 
-  } catch(e) {
-    console.log('Push init error:', e);
-  }
+    if (prev.rank && myRank > prev.rank) {
+      // We got overtaken
+      const overtaker = scores[myRank - 2]; // person now above us
+      new Notification('🏆 Überholt!', {
+        body: `${overtaker?.name||'Jemand'} hat dich auf Platz ${myRank} verdrängt. Hol auf!`,
+        icon: SQ_ICON, tag: 'sq-rank', vibrate: [300,100,300]
+      });
+    } else if (prev.rank && myRank < prev.rank) {
+      // We moved up
+      new Notification('🏆 Du hast jemanden überholt!', {
+        body: `Du bist jetzt auf Platz ${myRank} in der Rangliste!`,
+        icon: SQ_ICON, tag: 'sq-rank', vibrate: [200,100,200]
+      });
+    }
+
+    // ── Check 3: Neue Reaktionen ──
+    const myQ = query(collection(db,'completions'),
+      where('userId','==',currentUser.uid),
+      where('groupId','==',groupId),
+      where('date','==',todayKey()));
+    const mySnap = await getDocs(myQ);
+    let reactionCount = 0;
+    for (const d of mySnap.docs) {
+      const rSnap = await getDocs(collection(db,'completions',d.id,'reactions'));
+      reactionCount += rSnap.docs.filter(r =>
+        !r.data().seenBy?.includes(currentUser.uid) && r.data().userId !== currentUser.uid
+      ).length;
+    }
+    now.reactions = reactionCount;
+
+    if (reactionCount > 0 && reactionCount !== prev.notifiedReactions) {
+      new Notification('📸 Neue Reaktion!', {
+        body: `Du hast ${reactionCount} neue Reaktion${reactionCount>1?'en':''} auf deine Quests!`,
+        icon: SQ_ICON, tag: 'sq-reaction', vibrate: [200,100,200]
+      });
+      now.notifiedReactions = reactionCount;
+    } else {
+      now.notifiedReactions = prev.notifiedReactions;
+    }
+
+    // ── Check 4: Freunde aktiv im Feed ──
+    const allQ = query(collection(db,'completions'),
+      where('groupId','==',groupId), where('date','==',todayKey()));
+    const allSnap = await getDocs(allQ);
+    const friendCount = allSnap.docs.filter(d=>d.data().userId!==currentUser.uid).length;
+    now.friendCount = friendCount;
+
+    if (friendCount > 0 && friendCount !== prev.friendCount && friendCount !== prev.notifiedFriends) {
+      new Notification('👥 Freunde aktiv!', {
+        body: `${friendCount} Quest${friendCount>1?'s':''} von deiner Gruppe heute im Feed!`,
+        icon: SQ_ICON, tag: 'sq-feed', vibrate: [200,100,200]
+      });
+      now.notifiedFriends = friendCount;
+    } else {
+      now.notifiedFriends = prev.notifiedFriends;
+    }
+
+    // Save new state
+    localStorage.setItem(stateKey, JSON.stringify(now));
+
+  } catch(e) { /* silent */ }
 }
 
-// Send push notification to a user via their FCM token
-async function sendPushToUser(targetUid, title, body, type) {
-  try {
-    const uDoc = await getDoc(doc(db, 'users', targetUid));
-    if (!uDoc.exists() || !uDoc.data().fcmToken) return;
-    // Save notification to Firestore — a Cloud Function would send it
-    // For now, save to a notifications collection the SW can read
-    await addDoc(collection(db, 'notifications'), {
-      toUid: targetUid,
-      fcmToken: uDoc.data().fcmToken,
-      title,
-      body,
-      type,
-      createdAt: serverTimestamp(),
-      sent: false
-    });
-  } catch(e) {}
-}
+const SQ_ICON = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDI0IDEwMjQiPgogIDxyZWN0IHdpZHRoPSIxMDI0IiBoZWlnaHQ9IjEwMjQiIHJ4PSIyMzAiIGZpbGw9IiMwZDBkMGYiLz4KICA8Y2lyY2xlIGN4PSI1MTIiIGN5PSI1MTIiIHI9IjM4MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYzhmMTM1IiBzdHJva2Utd2lkdGg9IjE4IiBvcGFjaXR5PSIwLjE1Ii8+CiAgPGNpcmNsZSBjeD0iNTEyIiBjeT0iNTEyIiByPSIzMDAiIGZpbGw9IiMxNDE0MTYiLz4KICA8cG9seWdvbiBwb2ludHM9IjU3MCwxODAgMzgwLDU0MCA1MTAsNTQwIDQ1MCw4NDAgNjYwLDQ2MCA1MjAsNDYwIiBmaWxsPSIjYzhmMTM1Ii8+Cjwvc3ZnPg==';
 
-// Call after leaderboard position changes
-async function checkOvertakeNotification(myOldRank, myNewRank, myName) {
-  if (myNewRank >= myOldRank) return; // not overtaken
-  // Notify the person who got overtaken
-  // (handled server-side ideally, but we can do best-effort here)
-}
-
-// Service Worker registration for offline
+// Service Worker für Offline + Notifications
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sidequests/firebase-messaging-sw.js')
     .catch(() => {});
