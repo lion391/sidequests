@@ -1207,12 +1207,11 @@ async function loadLeaderboard() {
 
   for(const uid of members){
     const uDoc=await getDoc(doc(db,'users',uid));
-    if(!uDoc.exists()) continue;
-    const u={uid,...uDoc.data()};
+    // Show member even if no users doc exists yet — fallback to uid
+    const u = {uid, name: uDoc.exists() ? (uDoc.data().name||'Anonym') : 'Anonym', ...(uDoc.exists()?uDoc.data():{})};
     u.displayPts=0;
     u.displaySub='0 Quests diesen Monat';
     try {
-      // Simpler query without range filter to avoid index issues
       const mq=query(collection(db,'completions'),
         where('userId','==',uid),
         where('groupId','==',groupId));
@@ -1223,7 +1222,7 @@ async function loadLeaderboard() {
       });
       u.displayPts=monthDocs.reduce((s,d)=>s+(d.data().pts||0),0);
       u.displaySub=`${monthDocs.length} Quests diesen Monat`;
-    } catch(e) { /* show 0 if query fails */ }
+    } catch(e) { }
     users.push(u);
   }
 
