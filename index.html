@@ -115,15 +115,31 @@ window.showGroupScreen = showGroupScreen;
 
 // ── UPLOAD TO CLOUDINARY ──
 async function uploadToCloudinary(dataUrl, folder='proofs') {
-  const blob = await (await fetch(dataUrl)).blob();
   const fd = new FormData();
-  fd.append('file', blob);
+
+  // Convert data URL to blob without fetch (works on iOS Safari)
+  if (dataUrl.startsWith('data:')) {
+    const [header, base64] = dataUrl.split(',');
+    const mime = header.match(/:(.*?);/)[1];
+    const binary = atob(base64);
+    const arr = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+    const blob = new Blob([arr], { type: mime });
+    fd.append('file', blob, 'photo.jpg');
+  } else {
+    const blob = await (await fetch(dataUrl)).blob();
+    fd.append('file', blob);
+  }
+
   fd.append('upload_preset', UPLOAD_PRESET);
   fd.append('folder', `sidequests/${folder}`);
-  // Auto-delete after 24h using eager transformation tag
   fd.append('tags', 'auto_delete_24h');
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/upload`, { method: 'POST', body: fd });
+
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/upload`, {
+    method: 'POST', body: fd
+  });
   const data = await res.json();
+  if (!data.secure_url) throw new Error(data.error?.message || 'Upload fehlgeschlagen');
   return data.secure_url;
 }
 
@@ -319,7 +335,16 @@ function clearOldActiveQuests() {
 }
 
 function saveLocalProgress() {
-  localStorage.setItem('sq_progress', JSON.stringify({ score, completed, lastRound, dailySkips: getDailySkips() }));
+  try {
+    // Strip any localPhoto fields before saving (too large)
+    const cleanCompleted = completed.map(({localPhoto, ...rest}) => rest);
+    localStorage.setItem('sq_progress', JSON.stringify({ score, completed: cleanCompleted, lastRound, dailySkips: getDailySkips() }));
+  } catch(e) {
+    // localStorage full — save only essential data
+    try {
+      localStorage.setItem('sq_progress', JSON.stringify({ score, completed: completed.slice(0,10).map(({localPhoto,...r})=>r), lastRound: [], dailySkips: getDailySkips() }));
+    } catch(e2) { console.log('localStorage full'); }
+  }
   saveActiveQuests();
 }
 function loadLocalProgress() {
@@ -948,8 +973,8 @@ window.confirmComplete = async function() {
     score+=pts;
     const entry={
       title:q.t, diff:q.diff, cat:q.cat, emoji:q.e, pts,
-      date:todayKey(), notes:notes||null, photo:photoUrl||null,
-      localPhoto: pendingPhotoBack||null
+      date:todayKey(), notes:notes||null, photo:photoUrl||null
+      // localPhoto intentionally not saved — too large for localStorage
     };
     completed.unshift(entry);
     activeQuests[pendingIndex] = null;
