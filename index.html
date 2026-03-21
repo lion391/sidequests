@@ -133,7 +133,6 @@ async function uploadToCloudinary(dataUrl, folder='proofs') {
 
   fd.append('upload_preset', UPLOAD_PRESET);
   fd.append('folder', `sidequests/${folder}`);
-  fd.append('tags', 'auto_delete_24h');
 
   const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/upload`, {
     method: 'POST', body: fd
@@ -3669,9 +3668,26 @@ async function initPushNotifications() {
 function scheduleLocalNotifications() {
   if (Notification.permission !== 'granted') return;
 
-  // Run immediately once, then every 30 minutes
-  checkAndNotify();
-  setInterval(checkAndNotify, 30 * 60 * 1000);
+  // Only 3 checks per day at fixed times — saves ~95% of notification Firestore reads
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0,10);
+  const lastDay = localStorage.getItem('sq_notif_day');
+  if (lastDay !== todayStr) {
+    localStorage.setItem('sq_notif_day', todayStr);
+    localStorage.removeItem('sq_notif_state'); // reset daily state
+  }
+
+  [
+    { hour: 12, min: 0 },
+    { hour: 17, min: 30 },
+    { hour: 20, min: 0 },
+  ].forEach(s => {
+    const t = new Date();
+    t.setHours(s.hour, s.min, 0, 0);
+    const ms = t - now;
+    if (ms < 0) return;
+    setTimeout(() => checkAndNotify(), ms);
+  });
 }
 
 async function checkAndNotify() {
@@ -3681,56 +3697,61 @@ async function checkAndNotify() {
   try {
     const stateKey = 'sq_notif_state';
     const prev = JSON.parse(localStorage.getItem(stateKey) || '{}');
-    const now = {};
+    const now = { ...prev };
 
-    // ── Check 1: Quest progress ──
-    now.done = dailyDoneCount();
-    if (now.done !== prev.done && now.done > 0 && now.done !== prev.notifiedDone) {
-      // Only notify on milestones: 3, 5, 7, 10
-      const milestones = [3, 5, 7, 10];
-      if (milestones.includes(now.done)) {
-        new Notification('⚡ Quest-Meilenstein!', {
-          body: `${now.done} Quests heute erledigt! Noch ${10 - now.done} Slots frei.`,
-          icon: SQ_ICON, tag: 'sq-quests', vibrate: [200,100,200]
-        });
-        now.notifiedDone = now.done;
-      }
+    // ── Check 1: Quest progress (local — zero Firestore reads) ──
+    const done = dailyDoneCount();
+    now.done = done;
+    const milestones = [3, 5, 7, 10];
+    if (done > 0 && done !== prev.notifiedDone && milestones.includes(done)) {
+      new Notification('⚡ Quest-Meilenstein!', {
+        body: `${done} Quests heute erledigt! Noch ${10 - done} Slots frei.`,
+        icon: SQ_ICON, tag: 'sq-quests', vibrate: [200,100,200]
+      });
+      now.notifiedDone = done;
     }
 
-    // ── Check 2: Rangliste — wurden wir überholt? ──
-    const gDoc = await getDoc(doc(db,'groups',groupId));
-    const members = gDoc.data().members || [];
+    // ── Check 2: Rangliste (1 read for completions, use cached members) ──
     const mk = monthKey();
-    const scores = [];
-    for (const uid of members) {
-      const q = query(collection(db,'completions'),
-        where('userId','==',uid), where('groupId','==',groupId));
-      const snap = await getDocs(q);
-      const pts = snap.docs.filter(d=>d.data().date?.startsWith(mk))
-        .reduce((s,d)=>s+(d.data().pts||0),0);
-      const uDoc = await getDoc(doc(db,'users',uid));
-      scores.push({ uid, name: uDoc.exists()?uDoc.data().name:'Anonym', pts });
-    }
-    scores.sort((a,b)=>b.pts-a.pts);
-    const myRank = scores.findIndex(s=>s.uid===currentUser.uid) + 1;
+    const allCompQ = query(collection(db,'completions'),
+      where('groupId','==',groupId),
+      where('date','==',todayKey()));
+    const allSnap = await getDocs(allCompQ);
+
+    // Tally points per user from single query
+    const ptsByUser = {};
+    allSnap.docs.forEach(d => {
+      const uid = d.data().userId;
+      ptsByUser[uid] = (ptsByUser[uid]||0) + (d.data().pts||0);
+    });
+    const myPts = ptsByUser[currentUser.uid] || 0;
+    const myRank = Object.values(ptsByUser).filter(p => p > myPts).length + 1;
     now.rank = myRank;
 
     if (prev.rank && myRank > prev.rank) {
-      // We got overtaken
-      const overtaker = scores[myRank - 2]; // person now above us
       new Notification('🏆 Überholt!', {
-        body: `${overtaker?.name||'Jemand'} hat dich auf Platz ${myRank} verdrängt. Hol auf!`,
+        body: `Du bist auf Platz ${myRank} zurückgefallen. Hol auf!`,
         icon: SQ_ICON, tag: 'sq-rank', vibrate: [300,100,300]
       });
     } else if (prev.rank && myRank < prev.rank) {
-      // We moved up
       new Notification('🏆 Du hast jemanden überholt!', {
         body: `Du bist jetzt auf Platz ${myRank} in der Rangliste!`,
         icon: SQ_ICON, tag: 'sq-rank', vibrate: [200,100,200]
       });
     }
 
-    // ── Check 3: Neue Reaktionen ──
+    // ── Check 3: Freunde aktiv (from same query above — no extra reads) ──
+    const friendCount = allSnap.docs.filter(d=>d.data().userId!==currentUser.uid).length;
+    now.friendCount = friendCount;
+    if (friendCount > 0 && friendCount !== prev.notifiedFriends) {
+      new Notification('👥 Freunde aktiv!', {
+        body: `${friendCount} Quest${friendCount>1?'s':''} von deiner Gruppe heute im Feed!`,
+        icon: SQ_ICON, tag: 'sq-feed', vibrate: [200,100,200]
+      });
+      now.notifiedFriends = friendCount;
+    }
+
+    // ── Check 4: Reaktionen (only my completions — small query) ──
     const myQ = query(collection(db,'completions'),
       where('userId','==',currentUser.uid),
       where('groupId','==',groupId),
@@ -3744,37 +3765,15 @@ async function checkAndNotify() {
       ).length;
     }
     now.reactions = reactionCount;
-
     if (reactionCount > 0 && reactionCount !== prev.notifiedReactions) {
       new Notification('📸 Neue Reaktion!', {
         body: `Du hast ${reactionCount} neue Reaktion${reactionCount>1?'en':''} auf deine Quests!`,
         icon: SQ_ICON, tag: 'sq-reaction', vibrate: [200,100,200]
       });
       now.notifiedReactions = reactionCount;
-    } else {
-      now.notifiedReactions = prev.notifiedReactions;
     }
 
-    // ── Check 4: Freunde aktiv im Feed ──
-    const allQ = query(collection(db,'completions'),
-      where('groupId','==',groupId), where('date','==',todayKey()));
-    const allSnap = await getDocs(allQ);
-    const friendCount = allSnap.docs.filter(d=>d.data().userId!==currentUser.uid).length;
-    now.friendCount = friendCount;
-
-    if (friendCount > 0 && friendCount !== prev.friendCount && friendCount !== prev.notifiedFriends) {
-      new Notification('👥 Freunde aktiv!', {
-        body: `${friendCount} Quest${friendCount>1?'s':''} von deiner Gruppe heute im Feed!`,
-        icon: SQ_ICON, tag: 'sq-feed', vibrate: [200,100,200]
-      });
-      now.notifiedFriends = friendCount;
-    } else {
-      now.notifiedFriends = prev.notifiedFriends;
-    }
-
-    // Save new state
     localStorage.setItem(stateKey, JSON.stringify(now));
-
   } catch(e) { /* silent */ }
 }
 
