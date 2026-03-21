@@ -304,6 +304,7 @@ function initMain() {
   checkDuellNotifications();
   setTimeout(() => { try { cleanupOldFeedEntries(); } catch(e) {} }, 2000);
   initPushNotifications();
+  scheduleMidnightCleanup();
   fetchWeather && fetchWeather().then && null;
   cleanupOldFeedEntries();
 }
@@ -1042,15 +1043,41 @@ async function cleanupOldFeedEntries() {
   if (!groupId || !currentUser) return;
   try {
     const today = todayKey();
-    // Get all completions for this group
-    const q = query(collection(db,'completions'), where('groupId','==',groupId));
+    // Delete own old entries
+    const q = query(collection(db,'completions'),
+      where('userId','==',currentUser.uid),
+      where('groupId','==',groupId));
     const snap = await getDocs(q);
-    // Delete anything not from today
     const toDelete = snap.docs.filter(d => (d.data().date || '') !== today);
-    if (toDelete.length === 0) return;
-    await Promise.all(toDelete.map(d => deleteDoc(doc(db,'completions',d.id))));
-    console.log(`Cleaned up ${toDelete.length} old feed entries`);
+    if (toDelete.length > 0) {
+      await Promise.all(toDelete.map(d => deleteDoc(doc(db,'completions',d.id))));
+    }
+    // Also delete OTHER members' old entries (needs updated Firestore rule)
+    const allQ = query(collection(db,'completions'), where('groupId','==',groupId));
+    const allSnap = await getDocs(allQ);
+    const othersToDelete = allSnap.docs.filter(d => (d.data().date || '') !== today);
+    if (othersToDelete.length > 0) {
+      await Promise.all(othersToDelete.map(d =>
+        deleteDoc(doc(db,'completions',d.id)).catch(()=>{}) // silent if no permission
+      ));
+    }
   } catch(e) { /* silent */ }
+}
+
+// Schedule cleanup exactly at midnight
+function scheduleMidnightCleanup() {
+  const now = new Date();
+  const midnight = new Date();
+  midnight.setHours(24, 0, 0, 0); // next midnight
+  const msUntilMidnight = midnight - now;
+
+  setTimeout(async () => {
+    await cleanupOldFeedEntries();
+    if (el('tab-feed') && el('tab-feed').style.display !== 'none') {
+      loadFeed(); // refresh feed if open
+    }
+    scheduleMidnightCleanup(); // schedule next midnight
+  }, msUntilMidnight);
 }
 window.openPhotoLightbox = function(src) {
   el('lightboxImg').src = src;
