@@ -4,10 +4,48 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>SideQuest</title>
+
+<!-- PWA Meta -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="SideQuest">
 <meta name="theme-color" content="#0d0d0f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="application-name" content="SideQuest">
+<meta name="description" content="Raus aus dem Feed. Rein ins Leben.">
+
+<!-- Icons — inline SVG so keine extra Dateien nötig -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDI0IDEwMjQiPgogIDxyZWN0IHdpZHRoPSIxMDI0IiBoZWlnaHQ9IjEwMjQiIHJ4PSIyMzAiIGZpbGw9IiMwZDBkMGYiLz4KICA8Y2lyY2xlIGN4PSI1MTIiIGN5PSI1MTIiIHI9IjM4MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYzhmMTM1IiBzdHJva2Utd2lkdGg9IjE4IiBvcGFjaXR5PSIwLjE1Ii8+CiAgPGNpcmNsZSBjeD0iNTEyIiBjeT0iNTEyIiByPSIzMDAiIGZpbGw9IiMxNDE0MTYiLz4KICA8cG9seWdvbiBwb2ludHM9IjU3MCwxODAgMzgwLDU0MCA1MTAsNTQwIDQ1MCw4NDAgNjYwLDQ2MCA1MjAsNDYwIiBmaWxsPSIjYzhmMTM1Ii8+Cjwvc3ZnPg==">
+<link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDI0IDEwMjQiPgogIDxyZWN0IHdpZHRoPSIxMDI0IiBoZWlnaHQ9IjEwMjQiIHJ4PSIyMzAiIGZpbGw9IiMwZDBkMGYiLz4KICA8Y2lyY2xlIGN4PSI1MTIiIGN5PSI1MTIiIHI9IjM4MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYzhmMTM1IiBzdHJva2Utd2lkdGg9IjE4IiBvcGFjaXR5PSIwLjE1Ii8+CiAgPGNpcmNsZSBjeD0iNTEyIiBjeT0iNTEyIiByPSIzMDAiIGZpbGw9IiMxNDE0MTYiLz4KICA8cG9seWdvbiBwb2ludHM9IjU3MCwxODAgMzgwLDU0MCA1MTAsNTQwIDQ1MCw4NDAgNjYwLDQ2MCA1MjAsNDYwIiBmaWxsPSIjYzhmMTM1Ii8+Cjwvc3ZnPg==">
+
+<!-- PWA Manifest inline -->
+<script>
+const manifestData = {
+  name: "SideQuest",
+  short_name: "SideQuest",
+  description: "Raus aus dem Feed. Rein ins Leben.",
+  start_url: "/sidequests/",
+  scope: "/sidequests/",
+  display: "standalone",
+  background_color: "#0d0d0f",
+  theme_color: "#0d0d0f",
+  orientation: "portrait",
+  icons: [
+    {
+      src: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDI0IDEwMjQiPgogIDxyZWN0IHdpZHRoPSIxMDI0IiBoZWlnaHQ9IjEwMjQiIHJ4PSIyMzAiIGZpbGw9IiMwZDBkMGYiLz4KICA8Y2lyY2xlIGN4PSI1MTIiIGN5PSI1MTIiIHI9IjM4MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYzhmMTM1IiBzdHJva2Utd2lkdGg9IjE4IiBvcGFjaXR5PSIwLjE1Ii8+CiAgPGNpcmNsZSBjeD0iNTEyIiBjeT0iNTEyIiByPSIzMDAiIGZpbGw9IiMxNDE0MTYiLz4KICA8cG9seWdvbiBwb2ludHM9IjU3MCwxODAgMzgwLDU0MCA1MTAsNTQwIDQ1MCw4NDAgNjYwLDQ2MCA1MjAsNDYwIiBmaWxsPSIjYzhmMTM1Ii8+Cjwvc3ZnPg==",
+      sizes: "512x512",
+      type: "image/svg+xml",
+      purpose: "any maskable"
+    }
+  ]
+};
+const blob = new Blob([JSON.stringify(manifestData)], {type:'application/json'});
+const manifestUrl = URL.createObjectURL(blob);
+const link = document.createElement('link');
+link.rel = 'manifest';
+link.href = manifestUrl;
+document.currentScript.after(link);
+</script>
 <link rel="manifest" href="/sidequests/manifest.json">
 <link rel="apple-touch-icon" href="/sidequests/icon-192.png">
 <meta name="mobile-web-app-capable" content="yes">
@@ -3511,6 +3549,64 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 </div>
 
 
+
+<!-- ADD TO HOMESCREEN BANNER -->
+<div id="installBanner" style="display:none;position:fixed;bottom:80px;left:16px;right:16px;background:var(--surface);border:1px solid var(--accent);border-radius:16px;padding:14px 16px;z-index:999;box-shadow:0 4px 24px rgba(0,0,0,0.4)">
+  <div style="display:flex;align-items:center;gap:12px">
+    <div style="font-size:1.8rem">⚡</div>
+    <div style="flex:1">
+      <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.9rem">SideQuest installieren</div>
+      <div style="font-size:0.72rem;color:var(--muted);margin-top:2px">Zum Homescreen hinzufügen für die beste Erfahrung</div>
+    </div>
+    <button onclick="installApp()" style="background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:8px 14px;font-family:'Syne',sans-serif;font-weight:700;font-size:0.78rem;cursor:pointer">Install</button>
+    <button onclick="el('installBanner').style.display='none'" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:1.1rem">✕</button>
+  </div>
+</div>
+
+<script>
+// PWA Install prompt
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  // Show banner after 3 seconds
+  setTimeout(() => {
+    if (document.getElementById('installBanner'))
+      document.getElementById('installBanner').style.display = 'block';
+  }, 3000);
+});
+
+window.installApp = function() {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(() => {
+    deferredPrompt = null;
+    document.getElementById('installBanner').style.display = 'none';
+  });
+};
+
+window.addEventListener('appinstalled', () => {
+  document.getElementById('installBanner').style.display = 'none';
+});
+
+// Service Worker für Offline
+if ('serviceWorker' in navigator) {
+  const swCode = `
+    const CACHE = 'sidequests-v1';
+    self.addEventListener('install', e => {
+      e.waitUntil(caches.open(CACHE).then(c => c.addAll(['/sidequests/'])));
+    });
+    self.addEventListener('fetch', e => {
+      e.respondWith(
+        fetch(e.request).catch(() => caches.match(e.request))
+      );
+    });
+  `;
+  const blob = new Blob([swCode], {type:'application/javascript'});
+  navigator.serviceWorker.register(URL.createObjectURL(blob))
+    .catch(() => {}); // Silent fail if blocked
+}
+</script>
 
 <div class="toast" id="toast"></div>
 <script>
