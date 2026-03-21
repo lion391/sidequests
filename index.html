@@ -317,7 +317,20 @@ function activeQuestsKey() {
   return `sq_aq_${groupId}_${todayKey()}`;
 }
 function saveActiveQuests() {
-  if (groupId) localStorage.setItem(activeQuestsKey(), JSON.stringify(activeQuests));
+  if (!groupId) return;
+  try {
+    // Strip photos from active quests before saving
+    const clean = activeQuests.map(q => q ? {...q, localPhoto: undefined} : null);
+    localStorage.setItem(activeQuestsKey(), JSON.stringify(clean));
+  } catch(e) {
+    // Storage full — clear old active quest keys and retry
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('sq_aq_')) localStorage.removeItem(key);
+    });
+    try {
+      localStorage.setItem(activeQuestsKey(), JSON.stringify(activeQuests.map(q => q ? {...q, localPhoto: undefined} : null)));
+    } catch(e2) {}
+  }
 }
 function loadActiveQuests() {
   try {
@@ -349,13 +362,21 @@ function saveLocalProgress() {
 }
 function loadLocalProgress() {
   try {
-    const d = JSON.parse(localStorage.getItem('sq_progress') || '{}');
-    score = d.score || 0;
-    completed = d.completed || [];
-    lastRound = d.lastRound || [];
+    // Clear any legacy localPhoto data that might be stuck
+    const raw = localStorage.getItem('sq_progress');
+    if (raw) {
+      const d = JSON.parse(raw);
+      score = d.score || 0;
+      completed = (d.completed || []).map(({localPhoto, ...rest}) => rest);
+      lastRound = d.lastRound || [];
+    }
     activeQuests = loadActiveQuests();
     clearOldActiveQuests();
-  } catch(e) {}
+  } catch(e) {
+    // Corrupted data — reset
+    localStorage.removeItem('sq_progress');
+    score = 0; completed = []; lastRound = []; activeQuests = [];
+  }
 }
 function getDailySkips() {
   try {
