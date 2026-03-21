@@ -972,7 +972,6 @@ window.confirmComplete = async function() {
       updateDoc(doc(db,'users',currentUser.uid),{ score: increment(pts) })
     ]).catch(e => console.log('Firestore save error:', e));
 
-    cleanupOldFeedEntries();
     updateMainUI();
     showToast(`🎉 +${pts} Punkte!${photoUrl?' 📸':''}`, 2500);
     renderLocalHistory();
@@ -981,6 +980,8 @@ window.confirmComplete = async function() {
     closeProofModal(false);
     btn.disabled=false; btn.textContent='✅ Abschliessen & Punkte kassieren';
     removeCard(completedIndex,'done-anim',checkAllDone);
+    // Cleanup old feed entries in background
+    setTimeout(() => { try { cleanupOldFeedEntries(); } catch(e) {} }, 100);
 
   } catch(e) {
     // Safety net — never leave button stuck
