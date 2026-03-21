@@ -924,60 +924,69 @@ function composeBeReal(back, front) {
 window.confirmComplete = async function() {
   if(pendingIndex<0) return;
   const q=activeQuests[pendingIndex];
+  if(!q) return;
   const notes=el('proofNotes').value.trim();
   const btn=el('btnConfirmComplete');
   btn.disabled=true; btn.textContent='Wird gespeichert...';
 
-  let photoUrl=null;
-  if(pendingPhotoBack) {
-    try { photoUrl = await uploadToCloudinary(pendingPhotoBack,'proofs'); }
-    catch(e) { showToast('Foto-Upload fehlgeschlagen, wird ohne gespeichert'); }
-  }
-
-  const pts=DIFF_PTS[q.diff];
-  score+=pts;
-  const entry={
-    title:q.t, diff:q.diff, cat:q.cat, emoji:q.e, pts,
-    date:todayKey(), notes:notes||null, photo:photoUrl||null,
-    localPhoto: pendingPhotoBack||null
-  };
-  completed.unshift(entry);
-  activeQuests[pendingIndex] = null;
-  if (activeQuestIndex === pendingIndex) activeQuestIndex = -1;
-  saveLocalProgress();
-
-  // Save to Firestore for social features
   try {
-    await addDoc(collection(db,'completions'),{
-      userId: currentUser.uid,
-      userName: currentUser.displayName||'Anonym',
-      groupId,
-      questTitle: q.t,
-      questEmoji: q.e,
-      questDiff: q.diff,
-      pts,
-      notes: notes||null,
-      photoUrl: photoUrl||null,
-      date: todayKey(),
-      createdAt: serverTimestamp()
-    });
-    // Update user score in Firestore
-    await updateDoc(doc(db,'users',currentUser.uid),{
-      score: increment(pts),
-    });
-  } catch(e) { console.log('Firestore save error:', e); }
+    // Photo upload with 15s timeout
+    let photoUrl=null;
+    if(pendingPhotoBack) {
+      try {
+        const uploadPromise = uploadToCloudinary(pendingPhotoBack,'proofs');
+        const timeoutPromise = new Promise((_,rej) => setTimeout(()=>rej(new Error('timeout')), 15000));
+        photoUrl = await Promise.race([uploadPromise, timeoutPromise]);
+      } catch(e) {
+        showToast('Foto-Upload übersprungen — Quest wird trotzdem gespeichert');
+      }
+    }
 
-  // Clean up yesterday's feed entries
-  cleanupOldFeedEntries();
+    const pts=DIFF_PTS[q.diff];
+    score+=pts;
+    const entry={
+      title:q.t, diff:q.diff, cat:q.cat, emoji:q.e, pts,
+      date:todayKey(), notes:notes||null, photo:photoUrl||null,
+      localPhoto: pendingPhotoBack||null
+    };
+    completed.unshift(entry);
+    activeQuests[pendingIndex] = null;
+    if (activeQuestIndex === pendingIndex) activeQuestIndex = -1;
+    saveLocalProgress();
 
-  updateMainUI();
-  showToast(`🎉 +${pts} Punkte!${photoUrl?' 📸':''}`, 2500);
-  renderLocalHistory();
-  const completedIndex = pendingIndex;
-  closeProofModal(false);
-  btn.disabled=false; btn.textContent='✅ Abschliessen & Punkte kassieren';
-  removeCard(completedIndex,'done-anim',checkAllDone);
-  pendingIndex = -1;
+    // Save to Firestore — non-blocking, won't stop the flow if it fails
+    Promise.all([
+      addDoc(collection(db,'completions'),{
+        userId: currentUser.uid,
+        userName: currentUser.displayName||'Anonym',
+        groupId,
+        questTitle: q.t,
+        questEmoji: q.e,
+        questDiff: q.diff,
+        pts,
+        notes: notes||null,
+        photoUrl: photoUrl||null,
+        date: todayKey(),
+        createdAt: serverTimestamp()
+      }),
+      updateDoc(doc(db,'users',currentUser.uid),{ score: increment(pts) })
+    ]).catch(e => console.log('Firestore save error:', e));
+
+    cleanupOldFeedEntries();
+    updateMainUI();
+    showToast(`🎉 +${pts} Punkte!${photoUrl?' 📸':''}`, 2500);
+    renderLocalHistory();
+    const completedIndex = pendingIndex;
+    pendingIndex = -1;
+    closeProofModal(false);
+    btn.disabled=false; btn.textContent='✅ Abschliessen & Punkte kassieren';
+    removeCard(completedIndex,'done-anim',checkAllDone);
+
+  } catch(e) {
+    // Safety net — never leave button stuck
+    btn.disabled=false; btn.textContent='✅ Abschliessen & Punkte kassieren';
+    showToast('Fehler: ' + e.message);
+  }
 };
 
 // ── PHOTO LIGHTBOX ──
