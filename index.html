@@ -1076,7 +1076,6 @@ async function cleanupOldFeedEntries() {
   if (!groupId || !currentUser) return;
   try {
     const today = todayKey();
-    // Get ALL completions for this group and delete non-today ones
     const q = query(collection(db,'completions'), where('groupId','==',groupId));
     const snap = await getDocs(q);
     const toDelete = snap.docs.filter(d => {
@@ -1084,11 +1083,15 @@ async function cleanupOldFeedEntries() {
       return date !== today;
     });
     if (toDelete.length === 0) return;
-    // Delete one by one, ignore permission errors on others' docs
+    let deleted = 0;
     for (const d of toDelete) {
-      try { await deleteDoc(doc(db,'completions',d.id)); } catch(e) {}
+      try {
+        await deleteDoc(doc(db,'completions',d.id));
+        deleted++;
+      } catch(e) {}
     }
-  } catch(e) {}
+    if (deleted > 0) showToast(`🗑️ ${deleted} alte Feed-Einträge gelöscht`);
+  } catch(e) { showToast('Cleanup Fehler: ' + e.message); }
 }
 
 // Schedule cleanup exactly at midnight
