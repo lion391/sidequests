@@ -117,6 +117,7 @@ function showTab(id) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   el('tab-' + id).style.display = 'block';
   el('tabBtn-' + id).classList.add('active');
+  if (id === 'quests') { try { loadWeekQuest(); } catch(e){} try { renderSeasonalQuests(); } catch(e){} }
   if (id === 'feed') loadFeed();
   if (id === 'leaderboard') loadLeaderboard();
   if (id === 'fitness') loadFitnessTab();
@@ -2030,7 +2031,7 @@ function daysLeftInWeek() {
 }
 
 function weekQuestKey() {
-  return `sq_weekquest_${getWeekNumber()}_${new Date().getFullYear()}`;
+  return `sq_weekquest_${groupId}_${getWeekNumber()}_${new Date().getFullYear()}`;
 }
 
 async function loadWeekQuest() {
