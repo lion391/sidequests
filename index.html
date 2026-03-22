@@ -501,6 +501,8 @@ window.completeSeasonalQuest = function(index, eventName) {
 window.skipSeasonalQuest = function() {
   showToast('Quest übersprungen');
 };
+
+function getCurrentSeasonalEvent() {
   const now = new Date();
   const m = now.getMonth() + 1;
   const d = now.getDate();
