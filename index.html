@@ -2046,6 +2046,15 @@ async function loadWeekQuest() {
   if(done) box.style.borderColor = 'var(--accent)';
 }
 
+window.toggleWeekQuestDesc = function() {
+  const details = el('weekQuestDetails');
+  const chevron = el('weekQuestChevron');
+  if (!details) return;
+  const open = details.style.display === 'none';
+  details.style.display = open ? 'block' : 'none';
+  if (chevron) chevron.textContent = open ? '▲' : '▼';
+};
+
 window.completeWeekQuest = async function() {
   const wq = getWeekQuestForGroup();
   if(localStorage.getItem(weekQuestKey()) === 'done') return;
@@ -3500,16 +3509,25 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 
     <!-- QUESTS TAB -->
     <div class="tab-content" id="tab-quests">
-      <div id="weekQuestBox" style="display:none;background:var(--surface);border:2px solid var(--wild);border-radius:18px;padding:16px;margin-bottom:14px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-          <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:0.8rem;color:var(--wild)">🌟 WOCHENQUEST</span>
-          <span style="font-size:0.7rem;color:var(--muted)" id="weekQuestDaysLeft"></span>
-        </div>
-        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;margin-bottom:4px" id="weekQuestTitle"></div>
-        <div style="font-size:0.75rem;color:var(--muted);line-height:1.5;margin-bottom:12px" id="weekQuestDesc"></div>
-        <div style="display:flex;align-items:center;justify-content:space-between">
-          <span style="font-family:'Syne',sans-serif;font-weight:800;color:var(--wild)" id="weekQuestPts"></span>
-          <button id="weekQuestBtn" class="btn-confirm" style="width:auto;padding:8px 16px;font-size:0.8rem" onclick="completeWeekQuest()">✅ Erledigt!</button>
+      <!-- SEASONAL QUESTS BOX (above week quest) -->
+      <div id="seasonalQuestBox" style="display:none;margin-bottom:14px">
+        <div id="seasonalQuestList"></div>
+      </div>
+
+      <div id="weekQuestBox" style="display:none;background:var(--surface);border:2px solid var(--wild);border-radius:18px;overflow:hidden;margin-bottom:14px">
+        <button onclick="toggleWeekQuestDesc()" style="width:100%;padding:14px 16px;background:transparent;border:none;display:flex;align-items:center;justify-content:space-between;cursor:pointer;text-align:left">
+          <span>
+            <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:0.75rem;color:var(--wild);margin-bottom:4px">🌟 WOCHENQUEST · <span id="weekQuestDaysLeft"></span></div>
+            <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1rem" id="weekQuestTitle"></div>
+          </span>
+          <span id="weekQuestChevron" style="font-size:0.8rem;color:var(--muted);flex-shrink:0;margin-left:10px">▼</span>
+        </button>
+        <div id="weekQuestDetails" style="display:none;padding:0 16px 14px;border-top:1px solid var(--border)">
+          <div style="font-size:0.75rem;color:var(--muted);line-height:1.5;margin:10px 0 12px" id="weekQuestDesc"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <span style="font-family:'Syne',sans-serif;font-weight:800;color:var(--wild)" id="weekQuestPts"></span>
+            <button id="weekQuestBtn" class="btn-confirm" style="width:auto;padding:8px 16px;font-size:0.8rem" onclick="completeWeekQuest()">✅ Erledigt!</button>
+          </div>
         </div>
       </div>
 
@@ -3547,10 +3565,6 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         <div class="quest-placeholder"><span style="font-size:2rem;display:block;margin-bottom:8px">✨</span>Drück den Knopf — 5 Abenteuer warten!</div>
       </div>
 
-      <!-- SEASONAL QUESTS BOX -->
-      <div id="seasonalQuestBox" style="display:none;margin-top:14px">
-        <div id="seasonalQuestList"></div>
-      </div>
     </div>
 
     <!-- FEED TAB -->
