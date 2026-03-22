@@ -2730,7 +2730,48 @@ window.gpsSaveAsFitness = async function() {
 function initSettings() {
 }
 
-window.confirmResetPoints = function() {
+window.leaveAndSwitchGroup = async function() {
+  document.getElementById('settingsModal').style.display='none';
+  try {
+    if (groupId) {
+      const gDoc = await getDoc(doc(db,'groups',groupId));
+      if (gDoc.exists()) {
+        const members = (gDoc.data().members||[]).filter(uid => uid !== currentUser.uid);
+        if (members.length === 0) {
+          // Last member leaving — delete the group
+          await deleteDoc(doc(db,'groups',groupId));
+        } else {
+          // Remove self from members
+          await updateDoc(doc(db,'groups',groupId), { members });
+        }
+      }
+    }
+  } catch(e) { /* silent */ }
+  localStorage.removeItem('sq_groupId');
+  showGroupScreen();
+};
+
+// Also check on logout
+const _origLogout = el('btnLogout').onclick;
+el('btnLogout').onclick = async () => {
+  try {
+    if (groupId) {
+      const gDoc = await getDoc(doc(db,'groups',groupId));
+      if (gDoc.exists()) {
+        const members = (gDoc.data().members||[]).filter(uid => uid !== currentUser.uid);
+        if (members.length === 0) {
+          await deleteDoc(doc(db,'groups',groupId));
+        } else {
+          await updateDoc(doc(db,'groups',groupId), { members });
+        }
+      }
+    }
+  } catch(e) {}
+  localStorage.removeItem('sq_groupId');
+  if (feedUnsubscribe) feedUnsubscribe();
+  if (leaderboardUnsubscribe) leaderboardUnsubscribe();
+  await signOut(auth);
+};
   el('settingsModal').style.display = 'none';
   el('confirmResetModal').style.display = 'flex';
 };
@@ -3286,7 +3327,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         <button onclick="navigator.clipboard&&navigator.clipboard.writeText(el('groupCodeDisplay').textContent).then(()=>showToast('Code kopiert!'))" style="font-size:0.72rem;color:var(--accent3);background:transparent;border:1px solid var(--accent3);border-radius:6px;padding:3px 8px;cursor:pointer">📋 Kopieren</button>
       </div>
     </div>
-    <button class="btn-cancel" style="margin-bottom:20px" onclick="localStorage.removeItem('sq_groupId');showGroupScreen();document.getElementById('settingsModal').style.display='none'">👥 Gruppe wechseln</button>
+    <button class="btn-cancel" style="margin-bottom:20px" onclick="leaveAndSwitchGroup()">👥 Gruppe wechseln</button>
 
     <div style="font-size:0.72rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Daten</div>
     <button class="btn-cancel" style="margin-bottom:8px;color:var(--medium);border-color:var(--medium)" onclick="confirmResetPoints()">🔄 Meine Punkte zurücksetzen</button>
