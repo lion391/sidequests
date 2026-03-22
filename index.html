@@ -586,7 +586,14 @@ function initMain() {
   if (!localStorage.getItem('sq_guided')) {
     el('onboarding').style.display = 'flex';
   }
-  // Double-check: reload from localStorage if activeQuests still empty
+  // Load profile photo if not cached
+  if (!localStorage.getItem('sq_profile_photo')) {
+    getDoc(doc(db,'users',currentUser.uid)).then(d => {
+      if (d.exists() && d.data().photo) {
+        localStorage.setItem('sq_profile_photo', d.data().photo);
+      }
+    }).catch(()=>{});
+  }
   if (!activeQuests.some(q => q !== null)) {
     activeQuests = loadActiveQuests();
   }
@@ -1727,9 +1734,10 @@ async function loadFeed() {
     el('feedList').innerHTML=docs.map(d=>{
       const c=d.data();
       const isMe=c.userId===currentUser.uid;
+      const myPhoto = isMe ? localStorage.getItem('sq_profile_photo') : null;
       return `<div class="feed-card" id="feed-${d.id}">
         <div class="feed-header">
-          <div class="feed-avatar">${(c.userName||'?')[0].toUpperCase()}</div>
+          ${renderAvatar(c.userName, c.userId, 36, myPhoto)}
           <div style="flex:1">
             <div class="feed-username">${isMe?'Du':c.userName}</div>
             <div class="feed-time">${c.questEmoji} ${c.questTitle}</div>
@@ -1877,7 +1885,7 @@ async function loadLeaderboard() {
   for(const uid of members){
     const uDoc=await getDoc(doc(db,'users',uid));
     // Show member even if no users doc exists yet — fallback to uid
-    const u = {uid, name: uDoc.exists() ? (uDoc.data().name||'Anonym') : 'Anonym', ...(uDoc.exists()?uDoc.data():{})};
+    const u = {uid, name: uDoc.exists() ? (uDoc.data().name||'Anonym') : 'Anonym', photo: uDoc.exists() ? (uDoc.data().photo||null) : null, ...(uDoc.exists()?uDoc.data():{})};
     u.displayPts=0;
     u.displaySub='0 Quests diesen Monat';
     try {
@@ -1908,7 +1916,7 @@ async function loadLeaderboard() {
     const isLast=i===users.length-1&&users.length>1;
     return `<div class="lb-item ${isMe?'lb-me':''}" style="${isLast?'border-color:var(--hard)':''}">
       <div class="lb-rank">${isLast&&!isFirst?'😬':medals[i]||i+1}</div>
-      <div class="lb-avatar">${(u.name||'?')[0].toUpperCase()}</div>
+      ${renderAvatar(u.name, u.uid, 38, u.photo||null)}
       <div style="flex:1">
         <div class="lb-name">${u.name||'Anonym'}${isMe?' (Du)':''}</div>
         <div class="lb-sub">${u.displaySub}</div>
@@ -3564,6 +3572,89 @@ window.gpsSaveAsFitness = async function() {
 
 // Init settings checkbox state
 function initSettings() {
+  // Load current name
+  const nameInput = el('settingsNameInput');
+  if (nameInput) nameInput.value = currentUser?.displayName || '';
+  // Load current avatar
+  loadProfileAvatar();
+}
+
+function loadProfileAvatar() {
+  const avatarEl = el('settingsAvatar');
+  const initial = el('settingsAvatarInitial');
+  if (!avatarEl || !initial) return;
+  const photo = localStorage.getItem('sq_profile_photo');
+  const name = currentUser?.displayName || '?';
+  if (photo) {
+    avatarEl.innerHTML = `<img src="${photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
+  } else {
+    avatarEl.innerHTML = `<span id="settingsAvatarInitial" style="font-size:1.6rem;font-weight:800;color:var(--accent)">${name[0].toUpperCase()}</span>`;
+  }
+}
+
+// Handle avatar file selection
+document.addEventListener('DOMContentLoaded', () => {
+  const avatarInput = el('avatarInput');
+  if (avatarInput) {
+    avatarInput.addEventListener('change', async e => {
+      const f = e.target.files[0];
+      if (!f) return;
+      const r = new FileReader();
+      r.onload = async ev => {
+        showToast('Foto wird hochgeladen...');
+        try {
+          const url = await uploadToCloudinary(ev.target.result, 'avatars');
+          localStorage.setItem('sq_profile_photo', url);
+          await updateDoc(doc(db,'users',currentUser.uid), { photo: url });
+          loadProfileAvatar();
+          showToast('✅ Profilbild gespeichert!');
+        } catch(e) {
+          // Fallback: store as base64 locally
+          localStorage.setItem('sq_profile_photo', ev.target.result);
+          loadProfileAvatar();
+          showToast('✅ Profilbild gespeichert!');
+        }
+      };
+      r.readAsDataURL(f);
+    });
+  }
+});
+
+window.saveProfileChanges = async function() {
+  const newName = el('settingsNameInput').value.trim();
+  if (!newName) { showToast('Bitte einen Namen eingeben'); return; }
+  try {
+    await updateProfile(currentUser, { displayName: newName });
+    await updateDoc(doc(db,'users',currentUser.uid), { name: newName });
+    showToast('✅ Name gespeichert!');
+    el('mainUserName').textContent = newName;
+  } catch(e) {
+    showToast('Fehler beim Speichern');
+  }
+};
+
+// Get profile photo for a user (from Firestore cache)
+const _profilePhotoCache = {};
+async function getProfilePhoto(uid) {
+  if (_profilePhotoCache[uid]) return _profilePhotoCache[uid];
+  try {
+    const d = await getDoc(doc(db,'users',uid));
+    const photo = d.exists() ? d.data().photo : null;
+    if (photo) _profilePhotoCache[uid] = photo;
+    return photo;
+  } catch(e) { return null; }
+}
+
+// Render avatar HTML (photo or initial)
+function renderAvatar(name, uid, size=36, photo=null) {
+  const initial = (name||'?')[0].toUpperCase();
+  // Check local cache first
+  const localPhoto = uid === currentUser?.uid ? localStorage.getItem('sq_profile_photo') : null;
+  const src = photo || localPhoto;
+  if (src) {
+    return `<img src="${src}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;border:2px solid var(--border)">`;
+  }
+  return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:var(--accent)22;border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:${size*0.4}px;font-weight:800;color:var(--accent);flex-shrink:0">${initial}</div>`;
 }
 
 window.leaveAndSwitchGroup = async function() {
@@ -4292,6 +4383,22 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
   <div class="modal-sheet center-modal">
     <div class="modal-handle"></div>
     <div class="modal-title">⚙️ Einstellungen</div>
+
+    <div style="font-size:0.72rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Profil</div>
+    <!-- Avatar -->
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px">
+      <div style="position:relative;width:64px;height:64px;flex-shrink:0">
+        <div id="settingsAvatar" onclick="el('avatarInput').click()" style="width:64px;height:64px;border-radius:50%;background:var(--accent)22;border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:800;color:var(--accent);cursor:pointer;overflow:hidden">
+          <span id="settingsAvatarInitial">?</span>
+        </div>
+        <div onclick="el('avatarInput').click()" style="position:absolute;bottom:0;right:0;width:20px;height:20px;background:var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:0.65rem">📷</div>
+      </div>
+      <div style="flex:1">
+        <input id="settingsNameInput" type="text" placeholder="Dein Name" style="width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:0.9rem;margin-bottom:6px;box-sizing:border-box">
+        <button onclick="saveProfileChanges()" style="width:100%;padding:8px;background:var(--accent);color:var(--bg);border:none;border-radius:8px;font-weight:700;font-size:0.8rem;cursor:pointer">💾 Speichern</button>
+      </div>
+    </div>
+    <input type="file" id="avatarInput" accept="image/*" style="display:none">
 
     <div style="font-size:0.72rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Account</div>
     <button class="btn-cancel" style="margin-bottom:20px" id="btnLogout">🚪 Ausloggen</button>
