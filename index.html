@@ -2773,7 +2773,7 @@ window.gpsStart = function() {
       const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
       if (gpsPoints.length > 0) {
         const dist = haversineDistance(gpsPoints[gpsPoints.length-1], pt);
-        if (dist < 0.005) return; // filter noise < 5m
+        if (dist < 0.003) return; // filter noise < 3m (lower for walking)
         gpsTotalDistance += dist;
         el('gpsDistance').textContent = gpsTotalDistance.toFixed(2);
         if (gpsMode === 'fitness') {
@@ -2965,7 +2965,6 @@ async function loadFitnessTab() {
   // My runs this week
   const myQ = query(collection(db,'fitness_runs'),
     where('userId','==',currentUser.uid),
-    where('groupId','==',groupId),
     where('week','==',week),
     where('year','==',year));
   const mySnap = await getDocs(myQ);
@@ -2981,7 +2980,7 @@ async function loadFitnessTab() {
   for (const uid of members) {
     const uDoc = await getDoc(doc(db,'users',uid));
     const q2 = query(collection(db,'fitness_runs'),
-      where('userId','==',uid), where('groupId','==',groupId),
+      where('userId','==',uid),
       where('week','==',week), where('year','==',year));
     const snap2 = await getDocs(q2);
     const km = snap2.docs.reduce((s,d)=>s+(d.data().km||0),0);
@@ -3010,8 +3009,7 @@ async function loadFitnessTab() {
 
   // My past runs
   const allMyQ = query(collection(db,'fitness_runs'),
-    where('userId','==',currentUser.uid),
-    where('groupId','==',groupId));
+    where('userId','==',currentUser.uid));
   const allMySnap = await getDocs(allMyQ);
 
   // Auto-delete runs older than 7 days
