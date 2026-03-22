@@ -213,6 +213,19 @@ el('authToggle').onclick = () => {
 };
 
 el('btnLogout').onclick = async () => {
+  try {
+    if (groupId) {
+      const gDoc = await getDoc(doc(db,'groups',groupId));
+      if (gDoc.exists()) {
+        const members = (gDoc.data().members||[]).filter(uid => uid !== currentUser.uid);
+        if (members.length === 0) {
+          await deleteDoc(doc(db,'groups',groupId));
+        } else {
+          await updateDoc(doc(db,'groups',groupId), { members });
+        }
+      }
+    }
+  } catch(e) {}
   localStorage.removeItem('sq_groupId');
   if (feedUnsubscribe) feedUnsubscribe();
   if (leaderboardUnsubscribe) leaderboardUnsubscribe();
@@ -2738,28 +2751,6 @@ window.leaveAndSwitchGroup = async function() {
       if (gDoc.exists()) {
         const members = (gDoc.data().members||[]).filter(uid => uid !== currentUser.uid);
         if (members.length === 0) {
-          // Last member leaving — delete the group
-          await deleteDoc(doc(db,'groups',groupId));
-        } else {
-          // Remove self from members
-          await updateDoc(doc(db,'groups',groupId), { members });
-        }
-      }
-    }
-  } catch(e) { /* silent */ }
-  localStorage.removeItem('sq_groupId');
-  showGroupScreen();
-};
-
-// Also check on logout
-const _origLogout = el('btnLogout').onclick;
-el('btnLogout').onclick = async () => {
-  try {
-    if (groupId) {
-      const gDoc = await getDoc(doc(db,'groups',groupId));
-      if (gDoc.exists()) {
-        const members = (gDoc.data().members||[]).filter(uid => uid !== currentUser.uid);
-        if (members.length === 0) {
           await deleteDoc(doc(db,'groups',groupId));
         } else {
           await updateDoc(doc(db,'groups',groupId), { members });
@@ -2768,9 +2759,7 @@ el('btnLogout').onclick = async () => {
     }
   } catch(e) {}
   localStorage.removeItem('sq_groupId');
-  if (feedUnsubscribe) feedUnsubscribe();
-  if (leaderboardUnsubscribe) leaderboardUnsubscribe();
-  await signOut(auth);
+  showGroupScreen();
 };
   el('settingsModal').style.display = 'none';
   el('confirmResetModal').style.display = 'flex';
