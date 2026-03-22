@@ -2046,14 +2046,14 @@ window.declineTrade = async function() {
 let guideStep=0;
 window.guideNext = function() {
   guideStep++;
-  if(guideStep>=9){
+  if(guideStep>=10){
     localStorage.setItem('sq_guided','1');
     el('onboarding').style.display='none';
     return;
   }
   document.querySelectorAll('.guide-slide').forEach((s,i)=>s.classList.toggle('active',i===guideStep));
   document.querySelectorAll('.guide-dot').forEach((d,i)=>d.classList.toggle('active',i===guideStep));
-  el('guideNextBtn').textContent=guideStep===8?'Loslegen ⚡':'Weiter →';
+  el('guideNextBtn').textContent=guideStep===9?'Loslegen ⚡':'Weiter →';
 };
 
 // ── SEASONAL QUEST FILTERING ──
@@ -3695,43 +3695,48 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       <div class="guide-text">Du bekommst 5 zufällige Aufgaben pro Tag — max. 10 Slots: erledigen oder skippen, beides zählt. Nicht erledigte Quests werden am nächsten Tag automatisch gelöscht.</div>
     </div>
     <div class="guide-slide" id="slide-2">
+      <div class="guide-emoji">🌸</div>
+      <div class="guide-title">Saisonale Quests</div>
+      <div class="guide-text">Je nach Jahreszeit gibt es spezielle Quests — Frühlingsputz, Sommercamping, Herbstwanderung oder Weihnachtsguetzli. Diese sind grösser und geben bis zu 200 Punkte. Du findest sie ganz oben im Quests-Tab.</div>
+    </div>
+    <div class="guide-slide" id="slide-3">
+      <div class="guide-emoji">🌟</div>
+      <div class="guide-title">Wochenquest</div>
+      <div class="guide-text">Jede Woche gibt es eine gemeinsame Quest für die ganze Gruppe — bis zu 200 Punkte. Tippe darauf um die Beschreibung zu sehen. Sie läuft von Montag bis Sonntag.</div>
+    </div>
+    <div class="guide-slide" id="slide-4">
       <div class="guide-emoji">📸</div>
       <div class="guide-title">Beweisfoto & BeReal</div>
       <div class="guide-text">Beim Abschliessen machst du ein Foto — normal oder BeReal (Vorder + Rückkamera gleichzeitig). Im Feed sehen es deine Freunde. Tippe auf ein Foto um es im Vollbild zu sehen.</div>
     </div>
-    <div class="guide-slide" id="slide-3">
+    <div class="guide-slide" id="slide-5">
       <div class="guide-emoji">🗺️</div>
       <div class="guide-title">GPS bei Lauf-Quests</div>
-      <div class="guide-text">Bei Lauf-, Wander- oder Velo-Quests erscheint ein ▶ Start Button. Der GPS-Tracker zeichnet deine Strecke als anonyme Linie — keine Koordinaten, kein Tempo, kein Ort gespeichert.</div>
-    </div>
-    <div class="guide-slide" id="slide-4">
-      <div class="guide-emoji">⚔️</div>
-      <div class="guide-title">Duelle & eigene Quests</div>
-      <div class="guide-text">Im Quests-Tab findest du zwei Unterordner: "Duelle" — fordere Freunde heraus mit Punkteinsatz. "Eigene Quests" — erstell Aufgaben für die Gruppe oder global für alle SideQuest-Gruppen weltweit.</div>
-    </div>
-    <div class="guide-slide" id="slide-5">
-      <div class="guide-emoji">👥</div>
-      <div class="guide-title">Feed & Reaktionen</div>
-      <div class="guide-text">Im Feed siehst du was du und deine Gruppe heute erledigt haben. Reagiere mit einem Snapchat-Foto — es verschwindet nach dem Ansehen. Der Feed wird täglich um Mitternacht geleert.</div>
+      <div class="guide-text">Bei Lauf-, Wander- oder Velo-Quests erscheint ein ▶ Start Button. Der GPS-Tracker zeichnet deine Strecke als anonyme Linie — keine Koordinaten, kein Tempo gespeichert.</div>
     </div>
     <div class="guide-slide" id="slide-6">
-      <div class="guide-emoji">🏅</div>
-      <div class="guide-title">Monats-Rangliste & Preis</div>
-      <div class="guide-text">Die Rangliste resettet jeden Monat. Stimmt im Feed oder der Rangliste ab um was gespielt wird — Abendessen, Kinokarte, was auch immer. Erster gewinnt, Letzter zahlt.</div>
+      <div class="guide-emoji">⚔️</div>
+      <div class="guide-title">Duelle & eigene Quests</div>
+      <div class="guide-text">Fordere Freunde mit Punkteinsatz heraus — wer scheitert zahlt. Oder erstell eigene Quests für die Gruppe oder global für alle SideQuest-Gruppen weltweit.</div>
     </div>
     <div class="guide-slide" id="slide-7">
-      <div class="guide-emoji">🏃</div>
-      <div class="guide-title">Fitness & Wochensieger</div>
-      <div class="guide-text">Im Fitness-Tab: Läufe tracken und +10 Pts pro km sammeln — zusätzlich zu deinen Quests. Wer diese Woche am meisten läuft bekommt am Sonntag +100 Bonuspunkte.</div>
+      <div class="guide-emoji">👥</div>
+      <div class="guide-title">Feed & Reaktionen</div>
+      <div class="guide-text">Im Feed siehst du was deine Gruppe heute erledigt hat. Reagiere mit einem Snapchat-Foto — es verschwindet nach dem Ansehen. Kommentare bleiben den ganzen Tag. Der Feed wird täglich um Mitternacht geleert.</div>
     </div>
     <div class="guide-slide" id="slide-8">
-      <div class="guide-emoji">🌟</div>
+      <div class="guide-emoji">🏆</div>
+      <div class="guide-title">Rangliste & Monatspreis</div>
+      <div class="guide-text">Die Rangliste resettet jeden Monat. Stimmt ab um was gespielt wird — Erster gewinnt, Letzter zahlt. Im Fitness-Tab: Läufe tracken für +10 Pts/km, Wochensieger bekommt +100 Bonuspunkte.</div>
+    </div>
+    <div class="guide-slide" id="slide-9">
+      <div class="guide-emoji">🚀</div>
       <div class="guide-title">Los geht's!</div>
-      <div class="guide-text">Wochenquest oben im Tab gibt bis zu 200 Punkte. Mit 🔄 kannst du Quests an Freunde tauschen. Das ℹ️ Icon oben zeigt dir jederzeit Hilfe zum aktuellen Tab.</div>
+      <div class="guide-text">Lade Freunde per Einladungslink ein — in den Einstellungen findest du deinen Link. Das ℹ️ oben zeigt dir jederzeit Hilfe. Viel Spass — raus aus dem Feed, rein ins Leben!</div>
     </div>
   </div>
   <div class="guide-dots" id="guideDots">
-    <div class="guide-dot active"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div>
+    <div class="guide-dot active"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div>
   </div>
   <button class="btn-guide-next" id="guideNextBtn" onclick="guideNext()">Weiter →</button>
 </div>
