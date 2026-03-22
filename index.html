@@ -4761,33 +4761,46 @@ window.addEventListener('appinstalled', () => {
 const SQ_ICON = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDI0IDEwMjQiPgogIDxyZWN0IHdpZHRoPSIxMDI0IiBoZWlnaHQ9IjEwMjQiIHJ4PSIyMzAiIGZpbGw9IiMwZDBkMGYiLz4KICA8Y2lyY2xlIGN4PSI1MTIiIGN5PSI1MTIiIHI9IjM4MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYzhmMTM1IiBzdHJva2Utd2lkdGg9IjE4IiBvcGFjaXR5PSIwLjE1Ii8+CiAgPGNpcmNsZSBjeD0iNTEyIiBjeT0iNTEyIiByPSIzMDAiIGZpbGw9IiMxNDE0MTYiLz4KICA8cG9seWdvbiBwb2ludHM9IjU3MCwxODAgMzgwLDU0MCA1MTAsNTQwIDQ1MCw4NDAgNjYwLDQ2MCA1MjAsNDYwIiBmaWxsPSIjYzhmMTM1Ii8+Cjwvc3ZnPg==';
 
 async function initPushNotifications() {
-  if (!window.OneSignal) return;
   try {
-    // Ask for permission after login
-    const permission = await window.OneSignal.Notifications.permission;
+    // Wait for OneSignal to be ready via the deferred queue
+    await new Promise(resolve => {
+      if (window.OneSignal && window.OneSignal.User) return resolve();
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      window.OneSignalDeferred.push(() => resolve());
+      // Fallback timeout
+      setTimeout(resolve, 5000);
+    });
+
+    if (!window.OneSignal) return;
+
+    // Ask for permission
+    const permission = window.OneSignal.Notifications.permission;
     if (!permission) {
       await window.OneSignal.Slidedown.promptPush();
     }
-    // Save OneSignal player ID to Firestore for targeted notifications
-    const playerId = await window.OneSignal.User.PushSubscription.id;
+
+    // Wait a moment for subscription to be ready
+    await new Promise(r => setTimeout(r, 1000));
+
+    // Get player ID and save to Firestore
+    const playerId = window.OneSignal.User.PushSubscription.id;
     if (playerId && currentUser) {
       await updateDoc(doc(db,'users',currentUser.uid), { osPlayerId: playerId }).catch(()=>{});
+      console.log('OneSignal player ID saved:', playerId);
+    } else {
+      // Retry after subscription changes
+      window.OneSignal.User.PushSubscription.addEventListener('change', async (e) => {
+        const id = e.current?.id;
+        if (id && currentUser) {
+          await updateDoc(doc(db,'users',currentUser.uid), { osPlayerId: id }).catch(()=>{});
+          console.log('OneSignal player ID saved (delayed):', id);
+        }
+      });
     }
-    // Listen for subscription changes
-    window.OneSignal.User.PushSubscription.addEventListener('change', async (event) => {
-      if (event.current.id) {
-        await updateDoc(doc(db,'users',currentUser.uid), { osPlayerId: event.current.id }).catch(()=>{});
-      }
-    });
-  } catch(e) {}
-  // Schedule daily notifications via OneSignal tags
-  scheduleLocalNotifications();
-}
-
-function scheduleLocalNotifications() {
-  // Schedule 7:30 morning notification using local timer as fallback
+  } catch(e) {
+    console.log('OneSignal init error:', e);
+  }
   scheduleMorningNotification();
-  // Check for events every 30 min while app is open
   checkAndNotify();
   setInterval(checkAndNotify, 30 * 60 * 1000);
 }
