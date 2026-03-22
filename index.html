@@ -1880,8 +1880,7 @@ async function loadLeaderboard() {
     u.displaySub='0 Quests diesen Monat';
     try {
       const mq=query(collection(db,'completions'),
-        where('userId','==',uid),
-        where('groupId','==',groupId));
+        where('userId','==',uid));
       const mSnap=await getDocs(mq);
       const monthDocs=mSnap.docs.filter(d=>{
         const date=d.data().date||'';
