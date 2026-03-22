@@ -2210,16 +2210,146 @@ function weekQuestKey() {
 
 async function loadWeekQuest() {
   const wq = getWeekQuestForGroup();
-  const done = localStorage.getItem(weekQuestKey()) === 'done';
   const box = el('weekQuestBox');
   box.style.display = 'block';
   el('weekQuestTitle').textContent = wq.e + ' ' + wq.t;
   el('weekQuestDesc').textContent = wq.d;
   el('weekQuestPts').textContent = '+' + wq.pts + ' Pts';
-  el('weekQuestDaysLeft').textContent = done ? '✅ Erledigt!' : daysLeftInWeek() + ' Tage noch';
-  el('weekQuestBtn').style.display = done ? 'none' : 'block';
-  if(done) box.style.borderColor = 'var(--accent)';
+
+  const daysLeft = daysLeftInWeek();
+  const fullyDone = localStorage.getItem(weekQuestKey()) === 'done';
+  const todayChecked = localStorage.getItem(weekQuestDailyKey()) === '1';
+
+  // Count how many days checked this week
+  const checkedDays = getWeekCheckedDays();
+  const totalDays = 7;
+  const isLastDay = daysLeft === 0; // Sunday
+
+  if (fullyDone) {
+    el('weekQuestDaysLeft').textContent = '✅ Woche abgeschlossen!';
+    el('weekQuestBtn').style.display = 'none';
+    box.style.borderColor = 'var(--accent)';
+    renderWeekProgress(checkedDays, totalDays, true);
+    return;
+  }
+
+  el('weekQuestDaysLeft').textContent = daysLeft === 0 ? 'Letzter Tag!' : `${daysLeft} Tage noch`;
+
+  // Show progress dots
+  renderWeekProgress(checkedDays, totalDays, false);
+
+  if (isLastDay && !fullyDone) {
+    // Last day: show photo upload button
+    el('weekQuestBtn').style.display = 'block';
+    el('weekQuestBtn').textContent = todayChecked ? '📸 Abschlussfoto hochladen' : '📸 Letzter Tag — Foto & Abschliessen';
+    el('weekQuestBtn').onclick = openWeekQuestFinalPhoto;
+  } else if (todayChecked) {
+    el('weekQuestBtn').style.display = 'none';
+    el('weekQuestDaysLeft').textContent += ' · Heute ✅';
+  } else {
+    el('weekQuestBtn').style.display = 'block';
+    el('weekQuestBtn').textContent = '✅ Heute abhaken';
+    el('weekQuestBtn').onclick = checkInWeekQuestToday;
+  }
 }
+
+function weekQuestDailyKey() {
+  return `sq_wq_daily_${groupId}_${getWeekNumber()}_${new Date().getFullYear()}_${todayKey()}`;
+}
+
+function getWeekCheckedDays() {
+  const wk = getWeekNumber();
+  const yr = new Date().getFullYear();
+  let count = 0;
+  Object.keys(localStorage).forEach(k => {
+    if (k.startsWith(`sq_wq_daily_${groupId}_${wk}_${yr}_`)) count++;
+  });
+  return count;
+}
+
+function renderWeekProgress(checked, total, done) {
+  const container = el('weekQuestProgress');
+  if (!container) return;
+  const days = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+  const now = new Date();
+  const todayDow = (now.getDay() + 6) % 7; // 0=Mo, 6=So
+  container.innerHTML = days.map((d, i) => {
+    const isPast = i < todayDow;
+    const isToday = i === todayDow;
+    const isChecked = i < checked || done;
+    let bg = 'var(--surface2)';
+    let color = 'var(--muted)';
+    if (isChecked) { bg = 'var(--accent)'; color = 'var(--bg)'; }
+    else if (isToday) { bg = '#c084fc33'; color = 'var(--wild)'; }
+    return `<div style="flex:1;text-align:center;padding:4px 2px;background:${bg};border-radius:6px;font-size:0.65rem;font-weight:700;color:${color}">${isChecked ? '✓' : d}</div>`;
+  }).join('');
+}
+
+window.checkInWeekQuestToday = async function() {
+  if (localStorage.getItem(weekQuestDailyKey()) === '1') return;
+  localStorage.setItem(weekQuestDailyKey(), '1');
+  showToast('✅ Heute abgehakt! Weiter so!', 2000);
+  loadWeekQuest();
+};
+
+window.openWeekQuestFinalPhoto = function() {
+  el('weekQuestPhotoModal').style.display = 'flex';
+};
+
+window.closeWeekQuestPhotoModal = function() {
+  el('weekQuestPhotoModal').style.display = 'none';
+};
+
+// Handle final photo input
+let weekQuestPhotoData = null;
+el('weekQuestPhotoInput').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    weekQuestPhotoData = ev.target.result;
+    el('weekQuestPhotoPreview').src = ev.target.result;
+    el('weekQuestPhotoPreview').style.display = 'block';
+    el('weekQuestPhotoPlaceholder').style.display = 'none';
+  };
+  r.readAsDataURL(f);
+});
+
+window.submitWeekQuestFinal = async function() {
+  const wq = getWeekQuestForGroup();
+  if (localStorage.getItem(weekQuestKey()) === 'done') return;
+  const btn = el('weekQuestSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Wird gespeichert...';
+
+  // Mark today as checked too
+  localStorage.setItem(weekQuestDailyKey(), '1');
+
+  let photoUrl = null;
+  if (weekQuestPhotoData) {
+    try { photoUrl = await uploadToCloudinary(weekQuestPhotoData, 'weekquests'); } catch(e) {}
+  }
+
+  localStorage.setItem(weekQuestKey(), 'done');
+  score += wq.pts;
+  saveLocalProgress();
+
+  try {
+    await updateDoc(doc(db,'users',currentUser.uid), { score: increment(wq.pts) });
+    await addDoc(collection(db,'completions'), {
+      userId: currentUser.uid, userName: currentUser.displayName||'Anonym',
+      groupId, questTitle: '🌟 ' + wq.t, questEmoji: wq.e,
+      questDiff: 'wild', pts: wq.pts,
+      notes: 'Wochenquest abgeschlossen! 🎉',
+      photoUrl, date: todayKey(), createdAt: serverTimestamp()
+    });
+  } catch(e) {}
+
+  btn.disabled = false; btn.textContent = '🎉 Abschliessen';
+  closeWeekQuestPhotoModal();
+  updateMainUI();
+  loadWeekQuest();
+  showToast(`🌟 Wochenquest abgeschlossen! +${wq.pts} Punkte!`, 3000);
+};
 
 window.toggleWeekQuestDesc = function() {
   const details = el('weekQuestDetails');
@@ -2230,25 +2360,7 @@ window.toggleWeekQuestDesc = function() {
   if (chevron) chevron.textContent = open ? '▲' : '▼';
 };
 
-window.completeWeekQuest = async function() {
-  const wq = getWeekQuestForGroup();
-  if(localStorage.getItem(weekQuestKey()) === 'done') return;
-  localStorage.setItem(weekQuestKey(), 'done');
-  score += wq.pts;
-  saveLocalProgress();
-  try {
-    await updateDoc(doc(db,'users',currentUser.uid), { score: increment(wq.pts) });
-    await addDoc(collection(db,'completions'), {
-      userId: currentUser.uid, userName: currentUser.displayName||'Anonym',
-      groupId, questTitle: '🌟 ' + wq.t, questEmoji: wq.e,
-      questDiff: 'wild', pts: wq.pts, notes: 'Wochenquest erledigt!',
-      photoUrl: null, date: todayKey(), createdAt: serverTimestamp()
-    });
-  } catch(e) { console.error(e); }
-  updateMainUI();
-  loadWeekQuest();
-  showToast(`🌟 Wochenquest erledigt! +${wq.pts} Punkte!`, 3000);
-};
+window.completeWeekQuest = window.checkInWeekQuestToday;
 
 // ── INVITE MODAL ──
 let inviteQuestTitle = '';
@@ -3843,14 +3955,34 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
           </span>
           <span id="weekQuestChevron" style="font-size:0.8rem;color:var(--muted);flex-shrink:0;margin-left:10px">▼</span>
         </button>
-        <div id="weekQuestDetails" style="display:none;padding:0 16px 14px;border-top:1px solid var(--border)">
+        <!-- Progress dots -->
+        <div id="weekQuestProgress" style="display:flex;gap:4px;padding:8px 16px 0;"></div>
+        <div id="weekQuestDetails" style="display:none;padding:0 16px 14px;border-top:1px solid var(--border);margin-top:8px">
           <div style="font-size:0.75rem;color:var(--muted);line-height:1.5;margin:10px 0 12px" id="weekQuestDesc"></div>
           <div style="display:flex;align-items:center;justify-content:space-between">
             <span style="font-family:'Syne',sans-serif;font-weight:800;color:var(--wild)" id="weekQuestPts"></span>
-            <button id="weekQuestBtn" class="btn-confirm" style="width:auto;padding:8px 16px;font-size:0.8rem" onclick="completeWeekQuest()">✅ Erledigt!</button>
+            <button id="weekQuestBtn" class="btn-confirm" style="width:auto;padding:8px 16px;font-size:0.8rem" onclick="checkInWeekQuestToday()">✅ Heute abhaken</button>
           </div>
         </div>
       </div>
+
+<!-- WEEK QUEST FINAL PHOTO MODAL -->
+<div class="modal-backdrop" id="weekQuestPhotoModal" style="display:none">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🌟 Wochenquest abschliessen</div>
+    <div class="modal-sub">Letzter Tag — lade ein Beweisfoto hoch!</div>
+    <div id="weekQuestPhotoPlaceholder" style="display:flex;flex-direction:column;align-items:center;padding:20px 0;gap:10px;color:var(--muted)">
+      <span style="font-size:2rem">📸</span>
+      <span style="font-size:0.8rem">Foto optional — aber zeig was du diese Woche gemacht hast!</span>
+    </div>
+    <input type="file" id="weekQuestPhotoInput" accept="image/*" style="display:none">
+    <img id="weekQuestPhotoPreview" style="display:none;width:100%;border-radius:12px;max-height:200px;object-fit:cover;margin-bottom:10px">
+    <button onclick="el('weekQuestPhotoInput').click()" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);margin-bottom:8px;cursor:pointer">📷 Foto aufnehmen / aus Galerie</button>
+    <button id="weekQuestSubmitBtn" class="btn-confirm" onclick="submitWeekQuestFinal()" style="margin-bottom:8px">🎉 Abschliessen & Punkte kassieren</button>
+    <button class="btn-cancel" onclick="closeWeekQuestPhotoModal()">Abbrechen</button>
+  </div>
+</div>
 
       <!-- DUELL ACCORDION -->
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;margin-bottom:14px;overflow:hidden">
