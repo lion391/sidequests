@@ -698,10 +698,11 @@ function incrementDailySkip() {
   localStorage.setItem('sq_progress', JSON.stringify({ score, completed, lastRound, dailySkips: skips }));
 }
 function dailyUsedCount() {
+  // Joker quests don't count toward the 10-slot limit
   return dailyDoneCount() + dailySkipCount();
 }
 function dailyDoneCount() {
-  return completed.filter(q => q.date === todayKey()).length;
+  return completed.filter(q => q.date === todayKey() && !q.joker).length;
 }
 
 const LEVELS = [
@@ -736,265 +737,195 @@ function updateMainUI() {
 
 // ── QUEST LIST (copy from original) ──
 const ALL_QUESTS = [
-  {t:'Geh 10 Minuten spazieren',d:'Verlasse das Haus und spaziere 10 Minuten ohne Handy in der Hand. Schau bewusst auf deine Umgebung — was siehst, hörst, riechst du?',diff:'easy',cat:'Natur',e:'🚶'},
-  {t:'Sitz draussen und beobachte',d:'Such dir einen Platz im Freien und sitz einfach 5 Minuten still. Kein Handy — nur beobachten was um dich passiert.',diff:'easy',cat:'Natur',e:'🌿'},
-  {t:'Schau den Himmel an',d:'Geh raus und beobachte eine Minute lang die Wolken. Wie sehen sie aus, wohin bewegen sie sich?',diff:'easy',cat:'Natur',e:'☁️'},
-  {t:'Mach einen Abendspaziergang',d:'Geh nach dem Abendessen ohne Handy eine Runde spazieren. Mindestens 15 Minuten, einfach so.',diff:'easy',cat:'Natur',e:'🌇'},
-  {t:'Hol dir frische Luft',d:'Öffne alle Fenster oder geh kurz raus. Atme dreimal tief durch und spüre den Unterschied.',diff:'easy',cat:'Natur',e:'🌬️'},
-  {t:'Sitz an einem Gewässer',d:'Such dir einen Bach, See oder Brunnen und sitz ein paar Minuten einfach daneben.',diff:'easy',cat:'Natur',e:'💧'},
-  {t:'Geh barfuss',d:'Zieh die Schuhe aus und geh ein paar Minuten barfuss — auf Gras, Sand oder zu Hause.',diff:'easy',cat:'Natur',e:'🦶'},
-  {t:'Sonnenuntergang beobachten',d:'Such dir einen guten Platz und schau den Sonnenuntergang an. Handy weg — einfach erleben.',diff:'easy',cat:'Natur',e:'🌅'},
-  {t:'Beobachte ein Tier',d:'Schau einem Tier zu — Vogel, Hund, Katze, Insekt. Beobachte es eine Weile ohne es zu stören.',diff:'easy',cat:'Natur',e:'🐦'},
-  {t:'Riech an einer Blume',d:'Geh raus und such eine Blume oder ein Kraut. Riech daran, schau es dir genau an.',diff:'easy',cat:'Natur',e:'🌸'},
-  {t:'Pflanz etwas',d:'Kauf eine Pflanze, Samen oder Kräuter und pflanz sie ein. Kümmere dich dann wirklich darum.',diff:'easy',cat:'Natur',e:'🌱'},
-  {t:'Lieg im Gras',d:'Geh raus, such eine Wiese und leg dich einfach ins Gras. Schau in den Himmel.',diff:'easy',cat:'Natur',e:'🌾'},
-  {t:'Geh bei Regen raus',d:'Zieh Jacke an und geh absichtlich im Regen spazieren. Mindestens 10 Minuten.',diff:'medium',cat:'Natur',e:'🌧️'},
-  {t:'Beobachte einen Sonnenaufgang',d:'Stell den Wecker früh genug und schau dir den Sonnenaufgang an. Kein Handy dabei.',diff:'hard',cat:'Natur',e:'🌄'},
-  {t:'Mach eine Nachtwanderung',d:'Geh nach Einbruch der Dunkelheit wandern — mit Taschenlampe. Mindestens 30 Minuten.',diff:'hard',cat:'Natur',e:'🌙'},
-  {t:'Beobachte Sterne',d:'Geh an einen dunklen Ort und schau mindestens 15 Minuten die Sterne an.',diff:'medium',cat:'Natur',e:'⭐'},
-  {t:'Mach ein Feuer',d:'Mach ein kleines Feuer — Lagerfeuer oder Feuerschale. Sitz davor und schau rein.',diff:'medium',cat:'Natur',e:'🔥'},
-  {t:'Besuch einen Wasserfall',d:'Such dir einen Wasserfall in der Nähe und geh hin. Steh eine Weile einfach davor.',diff:'medium',cat:'Natur',e:'💦'},
-  {t:'Geh im See schwimmen',d:'Nicht im Hallenbad — in einem echten See. Spring rein, schwimm eine Runde.',diff:'medium',cat:'Natur',e:'🏊'},
-  {t:'Sitz auf einem Gipfel',d:'Wandere auf einen Gipfel oder Aussichtspunkt und sitz dort 20 Minuten still.',diff:'hard',cat:'Natur',e:'⛰️'},
-  {t:'Geh in die Berge',d:'Pack dich ein und fahr in die Berge — wandern, sitzen, schauen. Kein fixer Plan.',diff:'hard',cat:'Natur',e:'🏔️'},
-  {t:'Geh früh morgens raus',d:'Stell den Wecker eine Stunde früher und geh raus bevor die Welt aufwacht.',diff:'hard',cat:'Natur',e:'🌄'},
-  {t:'Geh eine Nacht zelten',d:'Pack ein Zelt, einen Schlafsack und geh irgendwo draussen schlafen.',diff:'hard',cat:'Natur',e:'⛺'},
-  {t:'Trink ein grosses Glas Wasser',d:'Steh auf, füll ein grosses Glas Wasser und trink es in Ruhe — ohne dabei aufs Handy zu schauen.',diff:'easy',cat:'Gesundheit',e:'💧'},
-  {t:'Streck dich 5 Minuten',d:'Steh auf und streck deinen Körper — Nacken, Schultern, Rücken, Beine.',diff:'easy',cat:'Gesundheit',e:'🧘'},
-  {t:'Mach 20 Liegestütze',d:'Leg das Handy weg, geh auf den Boden und mach 20 Liegestütze.',diff:'easy',cat:'Gesundheit',e:'💪'},
-  {t:'Koch dir einen Tee',d:'Mach dir einen Tee — ganz bewusst, ohne nebenbei zu scrollen.',diff:'easy',cat:'Gesundheit',e:'☕'},
-  {t:'Mach eine Atemübung',d:'Atme 4 Sekunden ein, halte 4, atme 4 aus. Wiederhole 5 Mal.',diff:'easy',cat:'Gesundheit',e:'🫁'},
-  {t:'Mach 50 Squats',d:'Steh auf und mach 50 Squats — langsam und bewusst.',diff:'easy',cat:'Gesundheit',e:'🏋️'},
-  {t:'Mach eine 10-Minuten-Meditation',d:'Setz dich hin, schliess die Augen und fokussiere 10 Minuten auf deinen Atem.',diff:'easy',cat:'Gesundheit',e:'🧘'},
-  {t:'Iss ein gesundes Znüni',d:'Iss als Snack nur Obst, Nüsse oder Gemüse.',diff:'easy',cat:'Gesundheit',e:'🍎'},
-  {t:'Trink 2 Liter Wasser',d:'Füll eine grosse Flasche und trink sie über den Tag — 2 Liter komplett.',diff:'easy',cat:'Gesundheit',e:'🍶'},
-  {t:'Wach ohne Wecker auf',d:'Geh heute früh genug ins Bett damit du morgen natürlich aufwachst.',diff:'medium',cat:'Gesundheit',e:'🌞'},
-  {t:'Mach ein 20-Minuten-Workout',d:'Liegestütze, Squats, Burpees — such dir was aus und zieh es durch.',diff:'medium',cat:'Sport',e:'🏋️'},
-  {t:'Geh joggen',d:'Schnür die Laufschuhe und geh 20 Minuten joggen.',diff:'medium',cat:'Sport',e:'🏃'},
-  {t:'Mach Yoga',d:'Mach eine 20-minütige Yoga-Session.',diff:'medium',cat:'Sport',e:'🧘'},
-  {t:'Geh schwimmen',d:'Such ein Schwimmbad oder See und spring rein. Mindestens 20 Minuten.',diff:'medium',cat:'Sport',e:'🏊'},
-  {t:'Fahr Velo',d:'Schnapp dir dein Velo und fahr eine Runde. Mindestens 20 Minuten.',diff:'medium',cat:'Sport',e:'🚴'},
-  {t:'Geh eine Stunde wandern',d:'Such dir eine Route und geh eine Stunde wandern. Kein Podcast.',diff:'medium',cat:'Natur',e:'🥾'},
-  {t:'Mach 100 Liegestütze',d:'Nicht alle auf einmal — aber 100 über den Tag verteilt. Zähle mit.',diff:'medium',cat:'Sport',e:'💪'},
-  {t:'Geh 10.000 Schritte',d:'Zähle heute deine Schritte und erreich 10.000.',diff:'medium',cat:'Sport',e:'👟'},
-  {t:'Geh klettern',d:'Such eine Kletterhalle und geh klettern. Anfänger willkommen.',diff:'medium',cat:'Sport',e:'🧗'},
-  {t:'Geh Bouldern',d:'Such eine Boulderhalle und versuch es.',diff:'medium',cat:'Sport',e:'🧗'},
-  {t:'Geh Badminton spielen',d:'Such dir jemanden und spiel Badminton — im Park, auf dem Platz.',diff:'easy',cat:'Sport',e:'🏸'},
-  {t:'Schwimm 500 Meter',d:'Geh ins Schwimmbad und schwimm 500 Meter. Das sind ca. 20 Bahnen.',diff:'medium',cat:'Sport',e:'🏊'},
-  {t:'Mach 5 Minuten Plank',d:'Insgesamt 5 Minuten Plank über den Tag verteilt. Zähle mit.',diff:'hard',cat:'Sport',e:'🏋️'},
-  {t:'Mach einen Waldlauf',d:'Nicht auf der Strasse — in einem Wald. Mindestens 20 Minuten.',diff:'medium',cat:'Sport',e:'🌲'},
-  {t:'Mach eine Velotour',d:'Plan eine Velotour über mindestens 20km.',diff:'hard',cat:'Sport',e:'🚵'},
-  {t:'Mach 30 Minuten Tanzen',d:'Mach die Musik an und tanz alleine zu Hause — 30 Minuten.',diff:'medium',cat:'Sport',e:'💃'},
-  {t:'Spiel ein Mannschaftssport',d:'Frag Freunde ob sie Fussball, Basketball spielen wollen.',diff:'medium',cat:'Sport',e:'⚽'},
-  {t:'Schreib 3 Dinge auf die dich freuen',d:'Notiere 3 Dinge die dich heute oder diese Woche gefreut haben.',diff:'easy',cat:'Selbstreflexion',e:'📝'},
-  {t:'Räum einen kleinen Bereich auf',d:'Such dir einen Ort — Schreibtisch, Küchenpult — und räum ihn auf.',diff:'easy',cat:'Selbstreflexion',e:'🧹'},
-  {t:'Schreib was dich gerade beschäftigt',d:'Schreib 10 Minuten lang alles raus was dir durch den Kopf geht.',diff:'easy',cat:'Selbstreflexion',e:'✍️'},
-  {t:'Schreib eine To-do-Liste',d:'Schreib auf was du diese Woche erledigen willst.',diff:'easy',cat:'Selbstreflexion',e:'📋'},
-  {t:'Stell dein Handy 2 Stunden auf stumm',d:'Flugmodus oder stumm — 2 Stunden. Schau was passiert.',diff:'easy',cat:'Selbstreflexion',e:'📵'},
-  {t:'Schreib deine 3 grössten Stärken',d:'Schreib ohne zu zögern deine 3 grössten Stärken auf.',diff:'easy',cat:'Selbstreflexion',e:'💪'},
-  {t:'Mach eine Dankes-Liste',d:'Schreib 10 Dinge für die du dankbar bist — heute, in deinem Leben.',diff:'easy',cat:'Selbstreflexion',e:'🙏'},
-  {t:'Schreib 10 Dinge die dich glücklich machen',d:'Schreib 20 Dinge auf die dich glücklich machen. Dann tu heute eines davon.',diff:'easy',cat:'Selbstreflexion',e:'😊'},
-  {t:'Mach einen digitalen Frühjahrsputz',d:'Lösch Apps die du nicht brauchst, räum deinen Handy-Startbildschirm auf.',diff:'easy',cat:'Selbstreflexion',e:'🗑️'},
-  {t:'Überprüf deine Social-Media-Nutzung',d:'Schau wie viel Zeit du heute auf Social Media verbracht hast. Setz ein Limit.',diff:'easy',cat:'Selbstreflexion',e:'📊'},
-  {t:'Sitz 10 Minuten komplett still',d:'Kein Handy, kein Musik. Einfach sitzen. 10 Minuten. Nichts tun.',diff:'medium',cat:'Selbstreflexion',e:'🪨'},
-  {t:'Schreib einen Brief an dein jüngeres Ich',d:'Was würdest du dir mit 15 oder 18 Jahren sagen?',diff:'medium',cat:'Selbstreflexion',e:'📝'},
-  {t:'Schreib was du in 1 Jahr erreicht haben willst',d:'Konkret und realistisch. Was willst du bis dahin gemacht haben?',diff:'medium',cat:'Selbstreflexion',e:'🎯'},
-  {t:'Schreib deine Werte auf',d:'Was sind die 5 Dinge die dir im Leben wirklich wichtig sind?',diff:'medium',cat:'Selbstreflexion',e:'⚖️'},
-  {t:'Mach eine Social-Media-Pause heute',d:'Kein Instagram, TikTok, Twitter. Den ganzen Tag.',diff:'medium',cat:'Selbstreflexion',e:'🧘'},
-  {t:'Faste einen Tag',d:'Iss heute nur in einem 8-Stunden-Fenster. Trink viel Wasser.',diff:'hard',cat:'Gesundheit',e:'⏳'},
-  {t:'Verbring einen Abend ohne Handy',d:'Von Abendessen bis Schlafen — kein Handy. Lies, spiel, rede.',diff:'hard',cat:'Selbstreflexion',e:'📵'},
-  {t:'Mach einen ganzen Tag Digitaldetox',d:'Kein Social Media, kein Scrollen, kein Netflix — den ganzen Tag.',diff:'hard',cat:'Selbstreflexion',e:'🧠'},
-  {t:'Räum eine ganze Schublade auf',d:'Such dir einen unordentlichen Ort und räum ihn komplett auf.',diff:'hard',cat:'Selbstreflexion',e:'🗂️'},
-  {t:'Schreib jemandem eine Nachricht',d:'Schick jemandem dem du lange nicht geschrieben hast eine echte Nachricht.',diff:'easy',cat:'Sozial',e:'💌'},
-  {t:'Sag jemandem Danke',d:'Sag jemandem persönlich oder per Nachricht danke — wirklich gemeint.',diff:'easy',cat:'Sozial',e:'🙏'},
-  {t:'Frag wie es jemandem geht',d:'Frag jemanden wie es ihm wirklich geht. Und hör zu.',diff:'easy',cat:'Sozial',e:'🤗'},
-  {t:'Geh mit jemandem spazieren',d:'Lad jemanden auf einen Spaziergang ein. Einfach gehen und reden.',diff:'easy',cat:'Sozial',e:'👫'},
-  {t:'Hör jemandem richtig zu',d:'Beim nächsten Gespräch: Handy weg, schau die Person an, hör wirklich zu.',diff:'easy',cat:'Sozial',e:'👂'},
-  {t:'Ruf jemanden an',d:'Ruf jemanden wirklich an — Freund, Familie. Einfach so.',diff:'medium',cat:'Sozial',e:'📞'},
-  {t:'Lad jemanden auf einen Kaffee ein',d:'Frag ob jemand spontan auf einen Kaffee vorbeikommen will.',diff:'medium',cat:'Sozial',e:'☕'},
-  {t:'Mach jemandem ein Kompliment',d:'Such dir jemanden und mach ihm ein ehrliches Kompliment.',diff:'medium',cat:'Sozial',e:'💬'},
-  {t:'Lade einen Freund zum Essen ein',d:'Lad jemanden zum Abendessen ein — bei dir oder im Restaurant.',diff:'medium',cat:'Sozial',e:'🍽️'},
-  {t:'Sprich einen Fremden an',d:'Fang ein kurzes Gespräch mit jemandem an den du nicht kennst.',diff:'medium',cat:'Sozial',e:'🤝'},
-  {t:'Schreib einem alten Kontakt',d:'Meld dich bei jemandem mit dem du seit Jahren keinen Kontakt hattest.',diff:'medium',cat:'Sozial',e:'🔄'},
-  {t:'Ruf deine Eltern an',d:'Ruf Mama oder Papa an — einfach so. Frag wie es ihnen geht.',diff:'medium',cat:'Sozial',e:'👨‍👩‍👦'},
-  {t:'Hilf einem Nachbarn',d:'Klopf beim Nachbarn und frag ob du etwas tun kannst.',diff:'medium',cat:'Sozial',e:'🏘️'},
-  {t:'Organisiere einen Spieleabend',d:'Lad Freunde ein und spiel Brett- oder Kartenspiele.',diff:'medium',cat:'Sozial',e:'🎲'},
-  {t:'Schreib jemandem 5 Dinge die du an ihm schätzt',d:'Schreib einer wichtigen Person 5 konkrete Dinge die du an ihr magst.',diff:'medium',cat:'Sozial',e:'💛'},
-  {t:'Ruf jemanden an den du lange nicht gesprochen hast',d:'Scroll durch deine Kontakte und ruf jemanden an.',diff:'medium',cat:'Sozial',e:'📲'},
-  {t:'Organisiere ein Treffen',d:'Schlag Freunden ein konkretes Treffen vor — mit Datum und Plan.',diff:'medium',cat:'Sozial',e:'📅'},
-  {t:'Geh mit jemandem frühstücken',d:'Verabrede dich morgens zum Frühstück.',diff:'medium',cat:'Sozial',e:'🥐'},
-  {t:'Verabrede dich für diese Woche',d:'Mach heute eine konkrete Verabredung — kein "müssen wir mal".',diff:'medium',cat:'Sozial',e:'🗓️'},
-  {t:'Schenk etwas das du liebst',d:'Gib etwas das du magst — Buch, CD — einem Freund der es schätzen wird.',diff:'medium',cat:'Sozial',e:'🎁'},
-  {t:'Mach jemandem eine Überraschung',d:'Überrasch jemanden heute — mit einer Kleinigkeit oder einem Besuch.',diff:'medium',cat:'Sozial',e:'🎁'},
-  {t:'Danke deinem Lieblingsrestaurant',d:'Sag dem Koch oder Personal persönlich wie sehr du es schätzt.',diff:'easy',cat:'Sozial',e:'👨‍🍳'},
-  {t:'Mach jemandem ein handgemachtes Geschenk',d:'Kauf nichts — mach etwas. Ein Bild, ein Kuchen, ein Brief.',diff:'hard',cat:'Sozial',e:'🎨'},
-  {t:'Lad jemanden spontan ein',d:'Ruf jemanden an und frag ob er heute noch vorbeikommen will.',diff:'hard',cat:'Sozial',e:'🎉'},
-  {t:'Besuch jemanden überraschend',d:'Erscheine unangekündigt bei einem Freund — mit Kuchen oder einfach so.',diff:'hard',cat:'Sozial',e:'🚪'},
-  {t:'Koch für andere',d:'Lad jemanden ein und koch ein Mehrgangmenü.',diff:'hard',cat:'Essen',e:'👨‍🍳'},
-  {t:'Volunteer für einen Tag',d:'Meld dich freiwillig für etwas an — Tiere, Menschen, Umwelt.',diff:'hard',cat:'Sozial',e:'🤝'},
-  {t:'Ruf jemanden an mit dem es Spannung gab',d:'Ruf ihn an — nicht um zu streiten, sondern um wieder in Kontakt zu kommen.',diff:'hard',cat:'Sozial',e:'🤙'},
-  {t:'Schreib jemandem einen langen Brief',d:'Schreib einer wichtigen Person einen echten, langen Brief.',diff:'hard',cat:'Sozial',e:'💌'},
-  {t:'Meld dich freiwillig in deiner Gemeinde',d:'Gibt es etwas in deiner Gemeinde wo du helfen könntest?',diff:'hard',cat:'Sozial',e:'🌍'},
-  {t:'Koch etwas Neues',d:'Such dir ein Rezept das du noch nie gemacht hast und koch es heute.',diff:'medium',cat:'Essen',e:'🍳'},
-  {t:'Back etwas',d:'Back Cookies, einen Kuchen oder Brot.',diff:'medium',cat:'Essen',e:'🧁'},
-  {t:'Mach ein Picknick',d:'Pack Essen ein, geh raus und iss draussen.',diff:'easy',cat:'Essen',e:'🧺'},
-  {t:'Iss eine Mahlzeit in Stille',d:'Iss eine Mahlzeit komplett ohne Handy, Fernseher oder Musik.',diff:'easy',cat:'Essen',e:'🥗'},
-  {t:'Mach Brot selbst',d:'Back ein einfaches Brot von Grund auf — Hefe, Mehl, Wasser, Salz.',diff:'medium',cat:'Essen',e:'🍞'},
-  {t:'Iss einen ganzen Tag vegan',d:'Alle Mahlzeiten komplett vegan. Probier etwas Neues.',diff:'medium',cat:'Essen',e:'🥗'},
-  {t:'Probier ein Essen aus einem anderen Land',d:'Koch oder kauf Essen aus einem Land das du noch nie probiert hast.',diff:'medium',cat:'Essen',e:'🌏'},
-  {t:'Koch mit dem was abläuft',d:'Schau was im Kühlschrank bald ablaufen wird und koch damit.',diff:'medium',cat:'Essen',e:'♻️'},
-  {t:'Geh auf den Bauernmarkt',d:'Kauf heute nur auf dem Bauernmarkt ein — frisch und lokal.',diff:'easy',cat:'Essen',e:'🥕'},
-  {t:'Mach Pasta selbst',d:'Mach Pasta von Hand — Mehl, Eier, ausrollen. Kein Fertigteig.',diff:'medium',cat:'Essen',e:'🍝'},
-  {t:'Mach Sushi selbst',d:'Kauf die Zutaten und mach Sushi von Hand.',diff:'hard',cat:'Essen',e:'🍣'},
-  {t:'Iss heute nur selbst Gekochtes',d:'Kein Restaurant, kein Take-Away — alle Mahlzeiten selbst kochen.',diff:'medium',cat:'Essen',e:'👨‍🍳'},
-  {t:'Koch ein 3-Gänge-Menü',d:'Plane und koch Vorspeise, Hauptgang und Dessert.',diff:'hard',cat:'Essen',e:'🍽️'},
-  {t:'Lies 10 Seiten in einem Buch',d:'Schnapp dir ein Buch und lies 10 Seiten am Stück.',diff:'easy',cat:'Kreativ',e:'📖'},
-  {t:'Hör bewusst Musik',d:'Mach ein Album an und hör es wirklich an — kein Multitasking.',diff:'easy',cat:'Kreativ',e:'🎵'},
-  {t:'Zeichne etwas',d:'Schnapp dir Papier und Stift und zeichne was du siehst.',diff:'medium',cat:'Kreativ',e:'✏️'},
-  {t:'Fotografiere etwas Schönes',d:'Geh raus und such bewusst nach etwas Schönem. Nicht für Social Media.',diff:'medium',cat:'Kreativ',e:'📷'},
-  {t:'Schreib ein Gedicht',d:'Schreib ein kurzes Gedicht — kein Reim nötig. Einfach Wörter.',diff:'medium',cat:'Kreativ',e:'📜'},
-  {t:'Mach eine Playlist',d:'Erstell eine Playlist für eine bestimmte Stimmung und hör sie an.',diff:'easy',cat:'Kreativ',e:'🎧'},
-  {t:'Fang ein Tagebuch an',d:'Kauf ein Notizbuch und schreib den ersten Eintrag.',diff:'medium',cat:'Kreativ',e:'📓'},
-  {t:'Lern 10 Wörter in einer neuen Sprache',d:'Such dir eine Sprache aus und lern heute 10 Wörter auswendig.',diff:'easy',cat:'Kreativ',e:'🗣️'},
-  {t:'Mach ein Aquarell',d:'Kauf günstige Wasserfarben und mal etwas.',diff:'medium',cat:'Kreativ',e:'🎨'},
-  {t:'Fotografiere deinen Tag',d:'Mach alle 2 Stunden ein Foto. Am Abend schau sie an.',diff:'easy',cat:'Kreativ',e:'📸'},
-  {t:'Fang ein Skizzenbuch an',d:'Kauf ein Skizzenbuch und zeichne heute die ersten 3 Seiten.',diff:'medium',cat:'Kreativ',e:'📒'},
-  {t:'Schreib eine Kurzgeschichte',d:'Schreib eine kurze Geschichte — eine Seite reicht.',diff:'medium',cat:'Kreativ',e:'📖'},
-  {t:'Mach ein Vision Board',d:'Schneid Bilder aus oder drucke aus — was willst du in deinem Leben?',diff:'medium',cat:'Kreativ',e:'🗂️'},
-  {t:'Lern ein Zaubertrick',d:'Such dir online einen einfachen Trick und lern ihn. Zeig ihn dann jemandem.',diff:'medium',cat:'Kreativ',e:'🎩'},
-  {t:'Schreib Lyrics zu einem Song',d:'Nimm einen Rhythmus im Kopf und schreib Liedtexte dazu.',diff:'medium',cat:'Kreativ',e:'🎤'},
-  {t:'Reparier etwas',d:'Such dir etwas Kaputtes und repariere es.',diff:'medium',cat:'Kreativ',e:'🔧'},
-  {t:'Lern ein Musikinstrument 30 Min',d:'Gitarre, Klavier, Ukulele — lern heute die ersten Töne.',diff:'medium',cat:'Kreativ',e:'🎸'},
-  {t:'Fang ein Kreativprojekt an',d:'Was wolltest du immer machen? Buch, Bild, Lied? Fang heute an.',diff:'hard',cat:'Kreativ',e:'🎨'},
-  {t:'Mach ein Stop-Motion-Video',d:'Mach ein kurzes Stop-Motion mit dem Handy. Mindestens 10 Sekunden.',diff:'medium',cat:'Kreativ',e:'🎬'},
-  {t:'Schreib einen Businessplan',d:'Du hast eine Idee? Schreib sie aus — Konzept, Zielgruppe, wie es funktioniert.',diff:'hard',cat:'Kreativ',e:'💡'},
-  {t:'Geh in ein Café das du nicht kennst',d:'Such ein Café das du noch nie besucht hast. Sitz ohne Handy.',diff:'medium',cat:'Abenteuer',e:'🗺️'},
-  {t:'Besuch einen Markt',d:'Geh auf einen Wochenmarkt oder Flohmarkt. Schau dich um.',diff:'medium',cat:'Abenteuer',e:'🛒'},
-  {t:'Entdecke ein neues Quartier',d:'Geh in ein Quartier deiner Stadt das du noch nie erkundet hast.',diff:'medium',cat:'Abenteuer',e:'🏙️'},
-  {t:'Besuch eine Ausstellung',d:'Geh in ein Museum oder eine Galerie.',diff:'medium',cat:'Abenteuer',e:'🎨'},
-  {t:'Probier ein neues Restaurant',d:'Geh in ein Restaurant das du noch nie besucht hast.',diff:'medium',cat:'Essen',e:'🍜'},
-  {t:'Nimm einen anderen Weg',d:'Geh heute einen komplett anderen Weg als sonst.',diff:'medium',cat:'Abenteuer',e:'🔀'},
-  {t:'Geh ins Kino',d:'Such einen Film aus und geh heute ins Kino.',diff:'medium',cat:'Abenteuer',e:'🎬'},
-  {t:'Geh auf einen Flohmarkt',d:'Such einen Flohmarkt, schau dich um und kauf etwas das dich anspringt.',diff:'easy',cat:'Abenteuer',e:'🛍️'},
-  {t:'Geh in eine Bibliothek',d:'Geh in die Bibliothek, such ein Buch und lies eine Stunde.',diff:'easy',cat:'Abenteuer',e:'📚'},
-  {t:'Besuch ein Tierpark',d:'Geh in den Zoo oder Tierpark und schau dir die Tiere an.',diff:'easy',cat:'Abenteuer',e:'🦁'},
-  {t:'Geh Minigolf',d:'Such eine Minigolfanlage und spiel eine Runde.',diff:'easy',cat:'Abenteuer',e:'⛳'},
-  {t:'Mach eine Bootsfahrt',d:'Steig auf ein Boot — Fähre, Ruderboot. Mindestens 20 Minuten.',diff:'medium',cat:'Abenteuer',e:'⛵'},
-  {t:'Geh zu einem Konzert',d:'Besuch heute oder diese Woche ein Konzert.',diff:'medium',cat:'Abenteuer',e:'🎸'},
-  {t:'Geh nachts raus',d:'Geh nach 22 Uhr alleine raus und erleb die Stadt nachts.',diff:'medium',cat:'Abenteuer',e:'🌙'},
-  {t:'Nimm spontan den ersten Bus',d:'Geh zur Haltestelle und steig in den nächsten Bus. 3 Stationen fahren.',diff:'medium',cat:'Abenteuer',e:'🚌'},
-  {t:'Fahr Kanu oder SUP',d:'Such ein Gewässer und miet ein Kanu oder SUP-Board.',diff:'medium',cat:'Sport',e:'🛶'},
-  {t:'Mach eine Nachttour durch die Stadt',d:'Geh nach 22 Uhr durch die Stadt zu Fuss oder Velo.',diff:'medium',cat:'Abenteuer',e:'🌃'},
-  {t:'Geh alleine essen',d:'Geh in ein Restaurant und iss alleine — ohne Handy auf dem Tisch.',diff:'hard',cat:'Abenteuer',e:'🍽️'},
-  {t:'Mach einen Tagesausflug',d:'Fahr in einen Ort den du nicht kennst. Kein fixer Plan.',diff:'hard',cat:'Abenteuer',e:'🚂'},
-  {t:'Meld dich für etwas Neues an',d:'Kurs, Club oder Aktivität — meld dich an. Heute noch.',diff:'hard',cat:'Abenteuer',e:'📋'},
-  {t:'Besuch eine Stadt die du nicht kennst',d:'Fahr in eine Stadt die du noch nie besucht hast.',diff:'hard',cat:'Abenteuer',e:'🚆'},
-  {t:'Fahr ans Ende der Linie',d:'Steig in den Zug und fahr bis zur Endstation. Schau was dort ist.',diff:'hard',cat:'Abenteuer',e:'🚆'},
-  {t:'Plane eine Reise',d:'Setz dich hin und plane wirklich eine Reise — such Orte, Hotels.',diff:'hard',cat:'Abenteuer',e:'✈️'},
-  {t:'Übernachte woanders',d:'Schlaf diese Nacht woanders — bei Freunden, im Hotel, im Zelt.',diff:'hard',cat:'Abenteuer',e:'🏨'},
-  {t:'Sprich jemanden an den du sympathisch findest',d:'Geh hin, stell dich vor und frag ob er oder sie auf einen Kaffee mitkommen will.',diff:'wild',cat:'Sozial',e:'💘'},
-  {t:'Tu etwas völlig Spontanes',d:'Mach heute etwas das du normalerweise nie tun würdest.',diff:'wild',cat:'Abenteuer',e:'🎲'},
-  {t:'Frag einen Fremden nach seiner Geschichte',d:'Frag jemanden im Zug oder Park was ihn bewegt.',diff:'wild',cat:'Sozial',e:'🗣️'},
-  {t:'Mach etwas das dir Angst macht',d:'Was vermeidest du immer? Mach es heute.',diff:'wild',cat:'Abenteuer',e:'🦁'},
-  {t:'Sag jemandem wie wichtig er dir ist',d:'Ruf ihn an oder schreib ihm und sag genau warum er dir wichtig ist.',diff:'wild',cat:'Sozial',e:'❤️'},
-  {t:'Überrasch jemanden komplett',d:'Erscheine unangekündigt bei einem Freund — mit Kuchen oder so.',diff:'wild',cat:'Sozial',e:'🎊'},
-  {t:'Spring ins kalte Wasser',d:'Such einen See, Bach oder nimm eine kalte Dusche. Richtig kalt.',diff:'wild',cat:'Abenteuer',e:'🥶'},
-  {t:'Ruf jemanden an dem du nie danke gesagt hast',d:'Denk an jemanden der dein Leben positiv geprägt hat. Ruf an.',diff:'wild',cat:'Sozial',e:'📞'},
-  {t:'Schreib einen Brief an dein zukünftiges Ich',d:'Schreib dir selbst einen Brief den du in 5 Jahren öffnest.',diff:'wild',cat:'Selbstreflexion',e:'🔮'},
-  {t:'Mach heute etwas Gutes für eine fremde Person',d:'Bezahl den Kaffee hinter dir, hilf jemandem. Unerwartet.',diff:'wild',cat:'Sozial',e:'✨'},
-  {t:'Geh alleine tanzen',d:'Geh in eine Bar oder Club und tanz — alleine.',diff:'wild',cat:'Abenteuer',e:'💃'},
-  {t:'Lass jemanden deinen Tag planen',d:'Ruf einen Freund an: "Du planst heute meinen Tag." Und mach es.',diff:'wild',cat:'Abenteuer',e:'🎭'},
-  {t:'Sprich mit 3 Fremden',d:'Fang heute 3 kurze Gespräche mit Menschen an die du nicht kennst.',diff:'wild',cat:'Sozial',e:'🗣️'},
-  {t:'Frag deinen besten Freund was er von dir denkt',d:'Ehrliches Feedback — Stärken, Schwächen. Hör zu ohne dich zu verteidigen.',diff:'wild',cat:'Sozial',e:'🪞'},
-  {t:'Leb einen Tag ohne Geld auszugeben',d:'Kein Kaffee, kein Mittag, kein Shopping. Einen ganzen Tag.',diff:'wild',cat:'Selbstreflexion',e:'💰'},
-  {t:'Buch spontan eine Reise',d:'Such ein Ziel und buch heute noch Zug oder Flug. Nicht nachdenken.',diff:'wild',cat:'Abenteuer',e:'✈️'},
-  {t:'Sag jemandem etwas das du noch nie gesagt hast',d:'Es gibt etwas das du jemandem sagen wolltest. Heute ist der Tag.',diff:'wild',cat:'Sozial',e:'💬'},
-  {t:'Sag "Ich liebe dich"',d:'Sag es heute — zu Elternteil, Geschwister, Partner, engem Freund.',diff:'wild',cat:'Sozial',e:'❤️'},
-  {t:'Schlaf draussen',d:'Schlaf diese Nacht unter freiem Himmel — Schlafsack im Garten oder Wald.',diff:'wild',cat:'Natur',e:'🌌'},
-  {t:'Triff eine Entscheidung die du aufgeschoben hast',d:'Du weisst welche es ist. Heute entscheidest du — und handelst.',diff:'wild',cat:'Selbstreflexion',e:'⚡'},
-  {t:'Geh 24 Stunden ohne Social Media',d:'24 Stunden komplett. Kein Instagram, TikTok, YouTube. Auch kein kurz schauen.',diff:'wild',cat:'Selbstreflexion',e:'📵'},
 
-  // ── NEUE QUESTS ──
-  // Easy
-  {t:'Mach 3 Minuten Atemübungen',d:'Setz dich hin, schliess die Augen. 4 Sekunden ein, 4 halten, 4 aus. Drei Minuten lang.',diff:'easy',cat:'Gesundheit',e:'🧘'},
-  {t:'Schreib eine Einkaufsliste für gesunde Woche',d:'Plan mindestens 3 gesunde Mahlzeiten und schreib alles auf was du brauchst.',diff:'easy',cat:'Gesundheit',e:'🥦'},
-  {t:'Ruf jemanden an statt zu schreiben',d:'Heute kommunizierst du mit mindestens einer Person per Anruf — kein Chat.',diff:'easy',cat:'Sozial',e:'📞'},
-  {t:'Mach dein Bett schön',d:'Nicht nur zudecken — Kissen gerade, Decke glatt, Zimmer kurz aufgeräumt.',diff:'easy',cat:'Selbstreflexion',e:'🛏️'},
-  {t:'Trink heute 2 Liter Wasser',d:'Füll eine Flasche und trink sie zweimal leer. Kein Softdrink, kein Kaffee — nur Wasser.',diff:'easy',cat:'Gesundheit',e:'💧'},
-  {t:'Geh barfuss draussen',d:'Zieh die Schuhe aus und geh mindestens 5 Minuten barfuss — Wiese, Sand, Weg.',diff:'easy',cat:'Natur',e:'🦶'},
-  {t:'Mach 20 Liegestütze',d:'Egal wann im Tag — mach 20 Liegestütze. Auf Knien erlaubt wenn nötig.',diff:'easy',cat:'Sport',e:'💪'},
-  {t:'Hör ein Podcast-Folge',d:'Such dir ein Thema das dich interessiert und hör eine ganze Episode — ohne andere Ablenkung.',diff:'easy',cat:'Lesen',e:'🎙️'},
-  {t:'Schreib 3 Dinge auf die du magst',d:'3 Dinge die du an dir selbst magst. Kein Beschönigen, kein Kleinreden.',diff:'easy',cat:'Selbstreflexion',e:'💛'},
-  {t:'Mach 10 Minuten Stretching',d:'Dehne dich vom Kopf bis zu den Füssen — langsam, bewusst, kein Wettbewerb.',diff:'easy',cat:'Sport',e:'🤸'},
-  {t:'Koch dir ein gesundes Frühstück',d:'Kein Fertigprodukt, kein Brot mit Aufschnitt — etwas mit frischen Zutaten.',diff:'easy',cat:'Kochen',e:'🍳'},
-  {t:'Lösch 50 alte Fotos vom Handy',d:'Öffne die Galerie und lösch was du nicht brauchst — Screenshots, Duplikate, alte Memes.',diff:'easy',cat:'Selbstreflexion',e:'🗑️'},
-  {t:'Steh heute ohne Snooze auf',d:'Wecker klingelt — sofort aufstehen. Keine Kompromisse, kein "noch 5 Minuten".',diff:'easy',cat:'Selbstreflexion',e:'⏰'},
-  {t:'Sitz 10 Minuten in der Sonne',d:'Geh raus und sitz bewusst in der Sonne — kein Handy, einfach da sein.',diff:'easy',cat:'Natur',e:'☀️'},
-  {t:'Zähl deine Schritte',d:'Check am Ende des Tages wie viele Schritte du gemacht hast. Ziel: mindestens 8000.',diff:'easy',cat:'Gesundheit',e:'👟'},
-  {t:'Schick jemandem ein Meme',d:'Such das lustigste Meme das du kennst und schick es jemandem der es braucht.',diff:'easy',cat:'Sozial',e:'😂'},
-  {t:'Mach 1 Minute Plank',d:'Eine Minute Plank halten. Timer stellen, Bauch anspannen, atmen.',diff:'easy',cat:'Sport',e:'⏱️'},
-  {t:'Räum einen Schrank aus',d:'Nur einen. Alles raus, einmal sortieren, nur behalten was du wirklich brauchst.',diff:'easy',cat:'Selbstreflexion',e:'🗄️'},
+  // ═══════════════════════════════════════
+  // 🃏 JOKER QUESTS (5 Pts, kein Slot-Verbrauch)
+  // ═══════════════════════════════════════
+  {t:'Trink ein grosses Glas Wasser',d:'Jetzt. Nicht später.',diff:'easy',cat:'Gesundheit',e:'💧',pts:5,joker:true},
+  {t:'Streck dich 3 Minuten',d:'Einfach aufstehen und kurz dehnen.',diff:'easy',cat:'Gesundheit',e:'🧘',pts:5,joker:true},
+  {t:'Mach dein Bett',d:'Ordentlich, nicht nur die Decke glätten.',diff:'easy',cat:'Selbstreflexion',e:'🛏️',pts:5,joker:true},
+  {t:'Schick jemandem ein Meme',d:'Eins das du lustig findest.',diff:'easy',cat:'Sozial',e:'😂',pts:5,joker:true},
+  {t:'Schreib 3 Dinge auf die dich heute freuen',d:'Kurz, ehrlich, jetzt.',diff:'easy',cat:'Selbstreflexion',e:'✏️',pts:5,joker:true},
+  {t:'Mach 20 Liegestütze',d:'Auf einmal, kein Schummeln.',diff:'easy',cat:'Sport',e:'💪',pts:5,joker:true},
+  {t:'Steh heute ohne Snooze auf',d:'Alarm klingelt — aufstehen.',diff:'easy',cat:'Selbstreflexion',e:'⏰',pts:5,joker:true},
+  {t:'Hör einen Podcast',d:'Eine Folge, mindestens 20 Minuten.',diff:'easy',cat:'Lesen',e:'🎙️',pts:5,joker:true},
+  {t:'Fotografiere etwas Schönes',d:'Etwas das du heute siehst.',diff:'easy',cat:'Kreativ',e:'📷',pts:5,joker:true},
+  {t:'Koch dir einen Tee',d:'Richtig aufbrühen, nicht aus dem Beutel hetzen.',diff:'easy',cat:'Gesundheit',e:'🍵',pts:5,joker:true},
+  {t:'Mach 1 Minute Plank',d:'Ohne Pause durchhalten.',diff:'easy',cat:'Sport',e:'🏋️',pts:5,joker:true},
+  {t:'Lösch 50 alte Fotos vom Handy',d:'Die die du sowieso nie anschaust.',diff:'easy',cat:'Selbstreflexion',e:'🗑️',pts:5,joker:true},
 
-  // Medium
-  {t:'Koch ein Rezept das du noch nie gemacht hast',d:'Such etwas Neues — nicht das was du immer machst. Mindestens 5 Zutaten.',diff:'medium',cat:'Kochen',e:'👨‍🍳'},
-  {t:'Lauf 3km am Stück',d:'Ohne Pause, in deinem eigenen Tempo. Nicht schnell — einfach durchziehen.',diff:'medium',cat:'Sport',e:'🏃'},
-  {t:'Schreib einen Brief der Hand',d:'An wen du willst — mit echter Tinte auf Papier. Mindestens eine Seite.',diff:'medium',cat:'Kreativ',e:'✉️'},
-  {t:'Geh heute ohne Kopfhörer',d:'Kein Podcast, keine Musik — den ganzen Tag. Hör was um dich herum passiert.',diff:'medium',cat:'Selbstreflexion',e:'🔇'},
-  {t:'Lern 10 Wörter in einer neuen Sprache',d:'Such dir eine Sprache, lern 10 Wörter und üb sie bis du sie auswendig kannst.',diff:'medium',cat:'Lesen',e:'🌍'},
-  {t:'Geh an einen Ort ohne Google Maps',d:'Frag nach dem Weg, nutze Schilder, orientiere dich selbst. Kein GPS.',diff:'medium',cat:'Abenteuer',e:'🧭'},
-  {t:'Mach 45 Minuten Sport',d:'Laufen, Gym, Velo — was auch immer. 45 Minuten am Stück, bewusst und ohne Handy.',diff:'medium',cat:'Sport',e:'🏋️'},
-  {t:'Iss heute vegetarisch',d:'Kein Fleisch, kein Fisch, kein Thunfisch im Salat. Echter Versuch, nicht "fast".',diff:'medium',cat:'Gesundheit',e:'🥗'},
-  {t:'Besuche eine Ausstellung oder ein Museum',d:'Geh alleine oder mit jemandem — steh wirklich vor den Werken, lies die Texte.',diff:'medium',cat:'Kreativ',e:'🎨'},
-  {t:'Mach einen langen Sonntagsbrunch',d:'Mindestens 1,5 Stunden am Tisch, selbst gemacht, keine Eile, kein Handy beim Essen.',diff:'medium',cat:'Kochen',e:'🥞'},
-  {t:'Sitz an einem Fluss oder See',d:'Geh dorthin und sitz einfach 20 Minuten — kein Buch, kein Handy, nur Wasser.',diff:'medium',cat:'Natur',e:'🌊'},
-  {t:'Ruf jemanden an den du lange nicht gesprochen hast',d:'Nicht schreiben — anrufen. Mindestens 15 Minuten reden.',diff:'medium',cat:'Sozial',e:'☎️'},
-  {t:'Mach eine digitale Detox-Stunde',d:'1 Stunde komplett ohne Bildschirm — kein Handy, kein TV, kein Computer.',diff:'medium',cat:'Selbstreflexion',e:'🧠'},
-  {t:'Zeichne etwas',d:'Nimm Stift und Papier und zeichne irgendetwas — gut sein ist nicht das Ziel.',diff:'medium',cat:'Kreativ',e:'✏️'},
-  {t:'Mach einen Mittagsschlaf',d:'Leg dich 20 Minuten hin — echter Schlaf oder Augen zu. Wecker stellen.',diff:'medium',cat:'Gesundheit',e:'😴'},
-  {t:'Geh in ein Café und lies ein Buch',d:'Kein Handy auf dem Tisch. Mindestens 30 Minuten lesen.',diff:'medium',cat:'Lesen',e:'☕'},
-  {t:'Organisiere deine Finanzen',d:'Schau dir deine Ausgaben des letzten Monats an. Was überrascht dich?',diff:'medium',cat:'Selbstreflexion',e:'💰'},
-  {t:'Lern ein Lied auswendig',d:'Such dir ein Lied aus, lern die Texte und sing es durch — alleine, laut.',diff:'medium',cat:'Musik',e:'🎵'},
-  {t:'Mach ein Picknick',d:'Pak eine Tasche, such einen schönen Ort und iss draussen — alleine oder mit jemandem.',diff:'medium',cat:'Natur',e:'🧺'},
-  {t:'Schreib deine 5-Jahres-Ziele auf',d:'Was willst du in 5 Jahren haben, sein, getan haben? Mindestens 5 konkrete Dinge.',diff:'medium',cat:'Selbstreflexion',e:'🎯'},
-  {t:'Stell dich einer kleinen Angst',d:'Etwas das du vermeidest weil es unangenehm ist. Heute tust du es trotzdem.',diff:'medium',cat:'Abenteuer',e:'🦁'},
-  {t:'Mach eine Stunde freiwilliges Aufräumen',d:'Aufräumen was du lange aufgeschoben hast — Keller, Garage, Kofferraum, Büro.',diff:'medium',cat:'Selbstreflexion',e:'🧹'},
-  {t:'Koch für jemand anderen',d:'Lad jemanden ein und koch für ihn — nicht zum Geburtstag, einfach so.',diff:'medium',cat:'Sozial',e:'🍽️'},
-  {t:'Mach 100 Squats',d:'Nicht auf einmal wenn nötig — aber alle 100 heute. Langsam und sauber.',diff:'medium',cat:'Sport',e:'🦵'},
-  {t:'Geh heute zu Fuss statt mit dem ÖV',d:'Wähle eine Strecke die du sonst fährst und lauf sie stattdessen.',diff:'medium',cat:'Sport',e:'🚶'},
+  // ═══════════════════════════════════════
+  // 🟢 EASY (10 Pts)
+  // ═══════════════════════════════════════
 
-  // Hard
-  {t:'Lauf 8km',d:'Achte auf deinen Rhythmus, nicht auf die Zeit. Einfach durchziehen.',diff:'hard',cat:'Sport',e:'🏃'},
-  {t:'Steh 5 Uhr auf',d:'Wecker auf 5:00 Uhr. Aufstehen, rausgehen oder etwas Sinnvolles tun.',diff:'hard',cat:'Selbstreflexion',e:'🌅'},
-  {t:'Koche ein 3-Gänge-Menü',d:'Vorspeise, Hauptgang, Dessert — alles selbst gemacht, alles frisch.',diff:'hard',cat:'Kochen',e:'🍷'},
-  {t:'Mach einen halben Tag komplett offline',d:'4 Stunden ohne jedes digitale Gerät. Kein Handy, kein Laptop, kein TV.',diff:'hard',cat:'Selbstreflexion',e:'🌿'},
-  {t:'Mach eine Stunde Kaltduschen-Training',d:'Erst warm, dann kalt — mindestens 2 Minuten kalt. Täglich diese Woche.',diff:'hard',cat:'Gesundheit',e:'🚿'},
-  {t:'Schreib 1000 Wörter',d:'Einen Aufsatz, eine Geschichte, ein Tagebuch — 1000 Wörter zu einem Thema deiner Wahl.',diff:'hard',cat:'Kreativ',e:'📝'},
-  {t:'Mach einen Tagesausflug alleine',d:'Fahr irgendwohin du noch nie warst — ohne Gesellschaft, ohne Plan, einfach los.',diff:'hard',cat:'Abenteuer',e:'🚂'},
-  {t:'Geh 15km wandern',d:'Such dir eine schöne Route, pack einen Rucksack und wandere den ganzen Weg.',diff:'hard',cat:'Natur',e:'🥾'},
-  {t:'Mach einen Tag Fasten',d:'Nur Wasser und ungesüssten Tee — keine feste Nahrung. Hör auf deinen Körper.',diff:'hard',cat:'Gesundheit',e:'⚡'},
-  {t:'Sprich heute nur Positives',d:'Kein Lästern, kein Kritisieren, keine Klage — den ganzen Tag nur aufbauende Worte.',diff:'hard',cat:'Sozial',e:'✨'},
-  {t:'Lern eine neue Fähigkeit 2 Stunden',d:'2 Stunden intensiv etwas lernen — Instrument, Sprache, Kochtechnik, Sport.',diff:'hard',cat:'Lesen',e:'🎓'},
-  {t:'Mach einen Abend ohne Strom',d:'Kerzen, kein Licht, kein Handy. Wie lebst du wenn der Strom weg ist?',diff:'hard',cat:'Abenteuer',e:'🕯️'},
-  {t:'Kontaktiere jemanden um Entschuldigung zu bitten',d:'Jemanden dem du etwas schuldest. Ehrlich, direkt, ohne Ausreden.',diff:'hard',cat:'Sozial',e:'🤝'},
-  {t:'Mach 1 Stunde Meditation',d:'60 Minuten sitzen, atmen, da sein. Gedanken ziehen lassen wie Wolken.',diff:'hard',cat:'Gesundheit',e:'🧘'},
-  {t:'Ruf deine Eltern an und frag wie es ihnen wirklich geht',d:'Nicht "alles gut?" — richtig nachfragen. Mindestens 30 Minuten.',diff:'hard',cat:'Sozial',e:'👨‍👩‍👦'},
-  {t:'Mach einen kompletten Frühlingsputz',d:'Ein Zimmer von A bis Z — Möbel rücken, hinter alles schauen, wirklich sauber.',diff:'hard',cat:'Selbstreflexion',e:'🧽'},
+  // Natur
+  {t:'Geh 10 Minuten spazieren',d:'Raus — kein Ziel, einfach gehen.',diff:'easy',cat:'Natur',e:'🚶'},
+  {t:'Sitz draussen und beobachte',d:'15 Minuten ohne Handy, nur schauen.',diff:'easy',cat:'Natur',e:'🌿'},
+  {t:'Schau den Sonnenuntergang an',d:'Bewusst, nicht beim Scrollen.',diff:'easy',cat:'Natur',e:'🌅'},
+  {t:'Sitz an einem Gewässer',d:'See, Fluss, Bach — mindestens 15 Minuten.',diff:'easy',cat:'Natur',e:'💧'},
+  {t:'Geh barfuss draussen',d:'Schuhe aus, auf Gras oder Erde, mindestens 10 Minuten.',diff:'easy',cat:'Natur',e:'🦶'},
+  {t:'Lieg im Gras',d:'Einfach hinlegen und den Himmel anschauen.',diff:'easy',cat:'Natur',e:'☁️'},
+  {t:'Sitz 15 Minuten in der Sonne',d:'Ohne Handy, einfach die Wärme geniessen.',diff:'easy',cat:'Natur',e:'☀️'},
+  {t:'Beobachte ein Tier',d:'Vogel, Eichhörnchen, Katze — mindestens 5 Minuten.',diff:'easy',cat:'Natur',e:'🐦'},
 
-  // Wild
-  {t:'Spring in kaltes Wasser',d:'See, Fluss oder kalte Dusche unter 15 Grad. Foto als Beweis.',diff:'wild',cat:'Abenteuer',e:'🏊'},
-  {t:'Sprich heute eine Stunde lang eine Fremdsprache',d:'Nur in der Fremdsprache — mit jemandem oder allein vor dem Spiegel.',diff:'wild',cat:'Lesen',e:'🌍'},
-  {t:'Geh an einen Ort den du nie besucht hättest',d:'Irgendwo das ausserhalb deiner Komfortzone liegt. Alleine hinfahren.',diff:'wild',cat:'Abenteuer',e:'🗺️'},
-  {t:'Sing in der Öffentlichkeit',d:'Irgendwo wo Leute sind — ein Lied singen, laut, keine Kopfhörer.',diff:'wild',cat:'Kreativ',e:'🎤'},
-  {t:'Iss heute nur rohe Nahrung',d:'Nichts Gekochtes, nichts Gebratenes — Früchte, Gemüse, Nüsse, rohe Zutaten.',diff:'wild',cat:'Gesundheit',e:'🥬'},
-  {t:'Mach etwas das du seit Jahren aufgeschoben hast',d:'Das eine Ding. Du weisst welches es ist.',diff:'wild',cat:'Selbstreflexion',e:'⚡'},
-  {t:'Verschenk etwas Wertvolles',d:'Nicht ein altes T-Shirt — etwas das dir wirklich etwas bedeutet, an jemanden dem es gut tut.',diff:'wild',cat:'Sozial',e:'🎁'},
-  {t:'Verbringe einen Tag ohne zu klagen',d:'Kein Seufzen, kein "ich bin müde", kein "das nervt". 24 Stunden.',diff:'wild',cat:'Selbstreflexion',e:'😤'},
-  {t:'Geh heute ohne Uhr',d:'Kein Check auf die Zeit — kein Handy, keine Uhr. Lass den Tag fliessen.',diff:'wild',cat:'Selbstreflexion',e:'⌚'},
-  {t:'Mach eine Sache die du Angst macht',d:'Etwas das du wirklich einschüchtert. Nicht symbolisch — wirklich Angst.',diff:'wild',cat:'Abenteuer',e:'🦁'},
-  {t:'Geh eine Nacht campen',d:'Pack das Nötigste und schlaf draussen — Zelt, Schlafsack, keine Unterkunft.',diff:'wild',cat:'Natur',e:'⛺'},
-  {t:'Fang ein Gespräch mit einem Fremden an',d:'Nicht "wie spät ist es" — ein echtes Gespräch. Mindestens 10 Minuten.',diff:'wild',cat:'Sozial',e:'👋'},
-  {t:'Mach einen Tag ohne Koffein',d:'Kein Kaffee, kein Schwarztee, kein Energy Drink. Den ganzen Tag.',diff:'wild',cat:'Gesundheit',e:'☕'},
+  // Sport
+  {t:'Mach 10 Minuten Stretching',d:'Richtig dehnen — kein halbes Dehnen.',diff:'easy',cat:'Sport',e:'🤸'},
+  {t:'Geh Badminton spielen',d:'Mit jemandem, mindestens 30 Minuten.',diff:'easy',cat:'Sport',e:'🏸'},
+  {t:'Mach 50 Squats',d:'Sauber, kein Schummeln.',diff:'easy',cat:'Sport',e:'🦵'},
+  {t:'Geh 30 Minuten schwimmen',d:'Im Freibad, See oder Hallenbad.',diff:'easy',cat:'Sport',e:'🏊'},
+
+  // Gesundheit
+  {t:'Mach eine 10-Minuten-Meditation',d:'Augen zu, tief atmen, alles loslassen.',diff:'easy',cat:'Gesundheit',e:'🧘'},
+  {t:'Iss heute keine Süssigkeiten',d:'Den ganzen Tag. Kein Schummeln um Mitternacht.',diff:'easy',cat:'Gesundheit',e:'🚫'},
+  {t:'Geh heute früh schlafen',d:'Vor 22:30 Uhr im Bett.',diff:'easy',cat:'Gesundheit',e:'😴'},
+  {t:'Koch dir ein gesundes Frühstück',d:'Kein Toast mit Nutella — richtig kochen.',diff:'easy',cat:'Gesundheit',e:'🥣'},
+  {t:'Kein Alkohol heute',d:'Einen Tag ohne. Klar.',diff:'easy',cat:'Gesundheit',e:'🧃'},
+  {t:'Mach eine Atemübung',d:'4-7-8 Methode: 4s einatmen, 7s halten, 8s ausatmen. 5x.',diff:'easy',cat:'Gesundheit',e:'🫁'},
+
+  // Selbstreflexion
+  {t:'Schreib was dich gerade beschäftigt',d:'Einfach aufschreiben — nicht lösen, nur rauslassen.',diff:'easy',cat:'Selbstreflexion',e:'📓'},
+  {t:'Überprüf deine Social-Media-Nutzung',d:'Geh in die Screen Time und schau ehrlich hin.',diff:'easy',cat:'Selbstreflexion',e:'📱'},
+  {t:'Stell dein Handy 2 Stunden auf stumm',d:'Wirklich stumm — nicht nur lautlos.',diff:'easy',cat:'Selbstreflexion',e:'🔇'},
+  {t:'Schreib eine To-do-Liste',d:'Alles was du diese Woche noch erledigen musst.',diff:'easy',cat:'Selbstreflexion',e:'✅'},
+  {t:'Räum deinen Schreibtisch auf',d:'Alles weg was nicht hingehört.',diff:'easy',cat:'Selbstreflexion',e:'🗂️'},
+  {t:'Schreib deine 3 grössten Stärken auf',d:'Ehrlich — nicht zu bescheiden.',diff:'easy',cat:'Selbstreflexion',e:'💪'},
+
+  // Sozial
+  {t:'Ruf jemanden an statt zu schreiben',d:'Wähle eine Person und ruf sie an.',diff:'easy',cat:'Sozial',e:'📞'},
+  {t:'Sag jemandem Danke',d:'Persönlich, nicht per Nachricht.',diff:'easy',cat:'Sozial',e:'🙏'},
+  {t:'Frag wie es jemandem wirklich geht',d:'Nicht als Floskel — warte auf die echte Antwort.',diff:'easy',cat:'Sozial',e:'❤️'},
+  {t:'Geh mit jemandem spazieren',d:'Mindestens 20 Minuten, kein Handy.',diff:'easy',cat:'Sozial',e:'👫'},
+  {t:'Schreib jemandem eine echte Nachricht',d:'Kein "hey" — etwas Persönliches.',diff:'easy',cat:'Sozial',e:'💌'},
+  {t:'Hör jemandem richtig zu',d:'Ohne zu unterbrechen, ohne aufs Handy zu schauen.',diff:'easy',cat:'Sozial',e:'👂'},
+
+  // Kreativ / Lesen
+  {t:'Lies 20 Seiten in einem Buch',d:'Echtes Buch oder E-Reader — kein Artikel zählt.',diff:'easy',cat:'Lesen',e:'📖'},
+  {t:'Hör bewusst ein Album',d:'Eines das du magst — von Anfang bis Ende, nur hören.',diff:'easy',cat:'Musik',e:'🎵'},
+  {t:'Lern 10 Wörter in einer Sprache',d:'Spanisch, Japanisch, Arabisch — was auch immer.',diff:'easy',cat:'Kreativ',e:'🌍'},
+  {t:'Zeichne etwas',d:'Was auch immer — gut sein ist egal.',diff:'easy',cat:'Kreativ',e:'✏️'},
+
+  // Abenteuer / Essen
+  {t:'Geh auf einen Flohmarkt',d:'Nicht kaufen — einfach schauen und stöbern.',diff:'easy',cat:'Abenteuer',e:'🏪'},
+  {t:'Besuch eine Bibliothek',d:'Rein, stöbern, mindestens ein Buch anschauen.',diff:'easy',cat:'Abenteuer',e:'📚'},
+  {t:'Geh auf den Wochenmarkt',d:'Frische Sachen kaufen, mit Marktleuten reden.',diff:'easy',cat:'Abenteuer',e:'🛒'},
+  {t:'Iss eine Mahlzeit ohne Bildschirm',d:'Kein Handy, kein TV, kein Laptop.',diff:'easy',cat:'Essen',e:'🍽️'},
+  {t:'Geh Minigolf',d:'Mit mindestens einer anderen Person.',diff:'easy',cat:'Abenteuer',e:'⛳'},
+
+  // ═══════════════════════════════════════
+  // 🟡 MEDIUM (25 Pts)
+  // ═══════════════════════════════════════
+
+  // Sport
+  {t:'Lauf 5km',d:'Draussen, am Stück — kein Laufband.',diff:'medium',cat:'Sport',e:'🏃'},
+  {t:'Mach 45 Minuten Sport',d:'Richtig schwitzen — Gym, Schwimmen, Velo, egal.',diff:'medium',cat:'Sport',e:'💪'},
+  {t:'Spiel ein Mannschaftssport',d:'Fussball, Volleyball, Basketball — mit anderen.',diff:'medium',cat:'Sport',e:'⚽'},
+  {t:'Geh eine Stunde Velo fahren',d:'Nicht zur Arbeit — als Ausflug, ohne festes Ziel.',diff:'medium',cat:'Sport',e:'🚴'},
+  {t:'Mach eine Stunde Yoga',d:'Richtige Session, kein 10-Minuten-Video.',diff:'medium',cat:'Sport',e:'🧘'},
+  {t:'Geh klettern',d:'Kletterhalle oder draussen — mindestens 1 Stunde.',diff:'medium',cat:'Sport',e:'🧗'},
+  {t:'Mach ein HIIT-Training',d:'20 Minuten intensiv — kein Pause-Schummeln.',diff:'medium',cat:'Sport',e:'🔥'},
+  {t:'Geh 10km wandern',d:'Mit Rucksack und Proviant.',diff:'medium',cat:'Sport',e:'🥾'},
+  {t:'Geh Inline Skaten',d:'Mindestens 45 Minuten am Stück.',diff:'medium',cat:'Sport',e:'🛼'},
+  {t:'Schwimm 1km',d:'Im See, Freibad oder Hallenbad.',diff:'medium',cat:'Sport',e:'🏊'},
+  {t:'Geh Tischtennis spielen',d:'Mindestens 30 Minuten gegen jemanden.',diff:'medium',cat:'Sport',e:'🏓'},
+
+  // Sozial
+  {t:'Organisiere ein Treffen',d:'Lade mindestens 2 Personen ein — du kümmerst dich um alles.',diff:'medium',cat:'Sozial',e:'🎉'},
+  {t:'Besuch jemanden spontan',d:'Ohne Vorankündigung — einfach klingeln.',diff:'medium',cat:'Sozial',e:'🚪'},
+  {t:'Mach jemandem eine Freude',d:'Etwas Unerwartetes — gross oder klein.',diff:'medium',cat:'Sozial',e:'🎁'},
+  {t:'Geh mit Freunden essen',d:'Restaurant oder selbst kochen — mindestens 3 Personen.',diff:'medium',cat:'Sozial',e:'🍴'},
+  {t:'Ruf jemanden an dem du lange nicht gesprochen hast',d:'Mindestens 20 Minuten reden.',diff:'medium',cat:'Sozial',e:'📞'},
+  {t:'Schreib einen handgeschriebenen Brief',d:'An wen auch immer — und schick ihn wirklich ab.',diff:'medium',cat:'Sozial',e:'✉️'},
+  {t:'Mach ein Foto-Shooting mit jemandem',d:'Geht raus und macht bewusst schöne Fotos.',diff:'medium',cat:'Sozial',e:'📸'},
+  {t:'Spiel ein Brettspiel',d:'Mit mindestens einer anderen Person, bis zum Ende.',diff:'medium',cat:'Sozial',e:'🎲'},
+  {t:'Geh mit jemandem ins Kino',d:'Einen richtigen Film, im Kino.',diff:'medium',cat:'Sozial',e:'🎬'},
+  {t:'Koch für jemanden',d:'Nicht für dich — für jemand anderen.',diff:'medium',cat:'Sozial',e:'👨‍🍳'},
+
+  // Selbstreflexion
+  {t:'Mach einen digitalen Detox-Halbtag',d:'4 Stunden ohne Handy und Computer.',diff:'medium',cat:'Selbstreflexion',e:'📵'},
+  {t:'Räum einen ganzen Raum auf',d:'Richtig — nicht nur Oberflächen abwischen.',diff:'medium',cat:'Selbstreflexion',e:'🧹'},
+  {t:'Schreib einen Tagebucheintrag',d:'Mindestens eine Seite — ehrlich.',diff:'medium',cat:'Selbstreflexion',e:'📔'},
+  {t:'Mach eine 20-Minuten-Meditation',d:'Mit Anleitung oder in Stille.',diff:'medium',cat:'Selbstreflexion',e:'🧘'},
+  {t:'Überleg dir 3 Ziele für den Monat',d:'Konkret und erreichbar — aufschreiben.',diff:'medium',cat:'Selbstreflexion',e:'🎯'},
+  {t:'Räum dein Handy auf',d:'Apps löschen, Fotos sortieren, Benachrichtigungen ausmisten.',diff:'medium',cat:'Selbstreflexion',e:'📱'},
+  {t:'Lies ein Sachbuch-Kapitel',d:'Nicht Roman — etwas das dich weiterbildet.',diff:'medium',cat:'Lesen',e:'📚'},
+  {t:'Hör ein Hörbuch 1 Stunde',d:'Konzentriert, nicht nebenbei.',diff:'medium',cat:'Lesen',e:'🎧'},
+  {t:'Mach eine Liste mit 10 Dingen die dich glücklich machen',d:'Ehrlich, nicht was du sagen solltest.',diff:'medium',cat:'Selbstreflexion',e:'😊'},
+
+  // Kreativ
+  {t:'Mach ein kreatives Foto-Projekt',d:'Such dir ein Thema und mach 10 bewusste Fotos.',diff:'medium',cat:'Kreativ',e:'📷'},
+  {t:'Lern etwas Neues auf YouTube',d:'Ein Tutorial zu etwas das dich wirklich interessiert — mindestens 30 Minuten.',diff:'medium',cat:'Kreativ',e:'🎓'},
+  {t:'Schreib ein Gedicht',d:'Muss nicht gut sein — einfach schreiben.',diff:'medium',cat:'Kreativ',e:'✍️'},
+  {t:'Zeichne etwas aus der Realität',d:'Ein Objekt, eine Person, eine Szene — mindestens 20 Minuten.',diff:'medium',cat:'Kreativ',e:'🎨'},
+  {t:'Mach eine Playlist für jemanden',d:'Wirklich durchdenken — welche Songs passen zu dieser Person?',diff:'medium',cat:'Musik',e:'🎵'},
+  {t:'Spiel ein Instrument 30 Minuten',d:'Egal welches — oder lern den ersten Griff.',diff:'medium',cat:'Musik',e:'🎸'},
+
+  // Natur / Abenteuer
+  {t:'Mach einen Tagesausflug',d:'Wohin du noch nie warst — alleine oder mit jemandem.',diff:'medium',cat:'Abenteuer',e:'🗺️'},
+  {t:'Geh in ein Museum',d:'Eines das dich wirklich interessiert — mindestens 1 Stunde.',diff:'medium',cat:'Abenteuer',e:'🏛️'},
+  {t:'Probier ein neues Restaurant',d:'Eines das du noch nie besucht hast.',diff:'medium',cat:'Essen',e:'🍜'},
+  {t:'Besuch einen Ort den du schon immer wolltest',d:'In deiner Stadt oder Region — heute gehst du wirklich hin.',diff:'medium',cat:'Abenteuer',e:'📍'},
+  {t:'Geh in eine Ausstellung',d:'Kunst, Fotografie, Geschichte — etwas das dich interessiert.',diff:'medium',cat:'Abenteuer',e:'🖼️'},
+  {t:'Mach eine Velotour mit Freunden',d:'Mindestens 15km, mit mindestens einer Person.',diff:'medium',cat:'Abenteuer',e:'🚴'},
+
+  // Gesundheit / Kochen
+  {t:'Koch ein Gericht aus einem anderen Land',d:'Rezept raussuchen, Zutaten holen, alles selbst machen.',diff:'medium',cat:'Kochen',e:'🌍'},
+  {t:'Mach selbstgemachtes Brot',d:'Von Grund auf — kein Fertigmix.',diff:'medium',cat:'Kochen',e:'🍞'},
+  {t:'Bereite ein gesundes Meal-Prep vor',d:'3 Mahlzeiten für die nächsten Tage vorbereiten.',diff:'medium',cat:'Kochen',e:'🥗'},
+  {t:'Geh einen Tag ohne Zucker',d:'Keinen Süssigkeiten, kein gesüsstes Getränk.',diff:'medium',cat:'Gesundheit',e:'🚫'},
+  {t:'Trink heute 3 Liter Wasser',d:'Über den ganzen Tag verteilt.',diff:'medium',cat:'Gesundheit',e:'💧'},
+  {t:'Mach heute 10000 Schritte',d:'Zählen — am Ende des Tages nachschauen.',diff:'medium',cat:'Gesundheit',e:'👟'},
+
+  // ═══════════════════════════════════════
+  // 🔴 HARD (50 Pts)
+  // ═══════════════════════════════════════
+
+  {t:'Lauf 10km',d:'Draussen, am Stück, keine Pausen.',diff:'hard',cat:'Sport',e:'🏃'},
+  {t:'Mach eine 2-Stunden-Wanderung',d:'Mit Rucksack, draussen, kein Stadtspaziergang.',diff:'hard',cat:'Sport',e:'🥾'},
+  {t:'Geh 2 Stunden Velo fahren',d:'Mindestens 30km, draussen.',diff:'hard',cat:'Sport',e:'🚴'},
+  {t:'Mach eine Stunde Krafttraining',d:'Richtig — nicht nur ein bisschen Hanteln.',diff:'hard',cat:'Sport',e:'🏋️'},
+  {t:'Geh heute ohne Handy aus dem Haus',d:'Den ganzen Ausflug — mindestens 3 Stunden.',diff:'hard',cat:'Selbstreflexion',e:'📵'},
+  {t:'Räum deine ganze Wohnung auf',d:'Alles — nicht nur das Sichtbare.',diff:'hard',cat:'Selbstreflexion',e:'🧹'},
+  {t:'Fang ein Kreativprojekt an',d:'Etwas das du schon lange machen wolltest — erste 2 Stunden investieren.',diff:'hard',cat:'Kreativ',e:'🎨'},
+  {t:'Lerne etwas komplett Neues',d:'Erste Stunde einer neuen Fähigkeit — Sprache, Instrument, Sport.',diff:'hard',cat:'Kreativ',e:'🎓'},
+  {t:'Schreib einen langen Brief an jemanden',d:'Mindestens 2 Seiten, handgeschrieben, wirklich abschicken.',diff:'hard',cat:'Sozial',e:'✉️'},
+  {t:'Organisiere einen Ausflug für die Gruppe',d:'Du planst alles — Ort, Zeit, Aktivität.',diff:'hard',cat:'Sozial',e:'🗺️'},
+  {t:'Mach 24 Stunden kein Social Media',d:'Alles deinstallieren oder ausloggen.',diff:'hard',cat:'Selbstreflexion',e:'📵'},
+  {t:'Koch ein 3-Gänge-Menü',d:'Vorspeise, Hauptgang, Dessert — alles selbst.',diff:'hard',cat:'Kochen',e:'🍽️'},
+  {t:'Lauf einen Halbmarathon',d:'21km. Kein Pause-Schummeln.',diff:'hard',cat:'Sport',e:'🏅'},
+  {t:'Mach einen ganzen Tag ohne Koffein',d:'Kein Kaffee, kein Energydrink, kein Schwarztee.',diff:'hard',cat:'Gesundheit',e:'☕'},
+  {t:'Lies ein ganzes Buch',d:'An einem oder zwei Tagen — mindestens 200 Seiten.',diff:'hard',cat:'Lesen',e:'📖'},
+  {t:'Mach heute früh auf und abends früh schlafen',d:'Vor 7 Uhr auf, vor 22 Uhr im Bett.',diff:'hard',cat:'Gesundheit',e:'⏰'},
+  {t:'Führe ein ganztägiges Gespräch ohne zu lügen',d:'Auch kleine Notlügen zählen.',diff:'hard',cat:'Selbstreflexion',e:'🤝'},
+  {t:'Besuch jemanden den du lange nicht gesehen hast',d:'Fahr hin — nicht nur anrufen.',diff:'hard',cat:'Sozial',e:'🚗'},
+  {t:'Mach heute alles mit links',d:'Essen, schreiben, Zähne putzen — ganzer Tag.',diff:'hard',cat:'Abenteuer',e:'✋'},
+  {t:'Verbring einen Tag in der Natur',d:'Mindestens 6 Stunden draussen — kein Café, keine Stadt.',diff:'hard',cat:'Natur',e:'🌲'},
+  {t:'Geh heute 20000 Schritte',d:'Den ganzen Tag aktiv sein.',diff:'hard',cat:'Sport',e:'👟'},
+  {t:'Mach eine Stunde Stille',d:'Kein Handy, kein Musik, kein TV — nur du und die Stille.',diff:'hard',cat:'Selbstreflexion',e:'🤫'},
+
+  // ═══════════════════════════════════════
+  // 🔥 WILD (75 Pts)
+  // ═══════════════════════════════════════
+
+  {t:'Schlaf draussen',d:'Im Garten, auf dem Balkon oder im Wald — ohne Hotel.',diff:'wild',cat:'Abenteuer',e:'⛺'},
+  {t:'Mach einen Spontanausflug',d:'Jetzt — pack eine Tasche und fahr los. Ziel erst unterwegs entscheiden.',diff:'wild',cat:'Abenteuer',e:'🎒'},
+  {t:'Ruf 5 alte Freunde an',d:'Die du lange nicht gesprochen hast. Alle heute.',diff:'wild',cat:'Sozial',e:'📞'},
+  {t:'Schreib einen Brief an dein zukünftiges Ich',d:'In einem Jahr öffnen. Ehrlich, mutig, persönlich.',diff:'wild',cat:'Selbstreflexion',e:'💌'},
+  {t:'Mach etwas das du Angst macht',d:'Eine echte Angst — keine kleine Unbequemlichkeit.',diff:'wild',cat:'Abenteuer',e:'😨'},
+  {t:'Geh einen ganzen Tag ohne Geld aus',d:'Kein Kaufen, kein Bestellen, kein Twint.',diff:'wild',cat:'Abenteuer',e:'💸'},
+  {t:'Sag jemandem etwas das du nie gesagt hast',d:'Etwas Wichtiges. Persönlich, nicht per Nachricht.',diff:'wild',cat:'Sozial',e:'🗣️'},
+  {t:'Organisiere eine Überraschungsparty',d:'Für jemanden. Du kümmerst dich um alles.',diff:'wild',cat:'Sozial',e:'🎉'},
+  {t:'Mach einen ganzen Tag ohne Strom',d:'Kein Handy, kein Licht, kein Herd. Kerzen erlaubt.',diff:'wild',cat:'Abenteuer',e:'🕯️'},
+  {t:'Lern etwas in 4 Stunden',d:'Etwas komplett Neues — erste echte Stunde einer Fähigkeit.',diff:'wild',cat:'Kreativ',e:'⚡'},
+  {t:'Spring von einer erhöhten Stelle ins Wasser',d:'Brücke, Felsen, Sprungturm — sicher aber mutig.',diff:'wild',cat:'Abenteuer',e:'🤿'},
+  {t:'Mach 100 Liegestütze an einem Tag',d:'Aufgeteilt wie du willst — aber alle heute.',diff:'wild',cat:'Sport',e:'💪'},
+  {t:'Faste einen ganzen Tag',d:'Nur Wasser. Kein Snack, kein Kaugummi.',diff:'wild',cat:'Gesundheit',e:'🚫'},
+  {t:'Geh eine Nacht nicht schlafen',d:'Bleib die ganze Nacht wach — bewusst.',diff:'wild',cat:'Abenteuer',e:'🌙'},
+  {t:'Mach etwas Gutes für einen Fremden',d:'Nicht für jemanden den du kennst — einen echten Fremden.',diff:'wild',cat:'Sozial',e:'🫶'},
+  {t:'Schreib 10 Seiten in einem Tag',d:'Tagebuch, Geschichte, Briefe — 10 handgeschriebene Seiten.',diff:'wild',cat:'Kreativ',e:'✍️'},
+  {t:'Geh heute auf niemanden ein der dich nervt',d:'Kein Augenrollen, kein passiv-aggressives Verhalten. Einen Tag.',diff:'wild',cat:'Selbstreflexion',e:'😇'},
+  {t:'Verbring 8 Stunden in der Natur',d:'Wanderung, Camping, draussen — mindestens 8h.',diff:'wild',cat:'Natur',e:'🏕️'},
 ];
+
 
 // ── QUEST LOGIC ──
 const DIFF_DE = {easy:'Leicht',medium:'Mittel',hard:'Schwer',wild:'Wild 🔥'};
@@ -1008,8 +939,10 @@ function shuffle(arr) {
 
 function pickQuests() {
   const used = new Set([...lastRound, ...completed.slice(0,20).map(q=>q.title)]);
-  let pool = ALL_QUESTS.filter(q => !used.has(q.t));
-  if(pool.length < 5) pool = [...ALL_QUESTS];
+  // Separate jokers from regular quests
+  const regularPool = ALL_QUESTS.filter(q => !q.joker && !used.has(q.t));
+  const jokerPool = ALL_QUESTS.filter(q => q.joker && !used.has(q.t));
+  let pool = regularPool.length >= 5 ? regularPool : [...ALL_QUESTS.filter(q => !q.joker)];
   pool = shuffle(pool);
   const result=[];
   const plan = shuffle(['easy','easy','medium','medium','hard']);
@@ -1018,20 +951,14 @@ function pickQuests() {
     result.push(m||pool.find(q=>!result.find(r=>r.t===q.t))||pool[0]);
   }
   if(Math.random()<0.4){
-    const w=ALL_QUESTS.filter(q=>q.diff==='wild'&&!used.has(q.t));
+    const w=ALL_QUESTS.filter(q=>q.diff==='wild'&&!q.joker&&!used.has(q.t));
     if(w.length) result[4]=w[Math.floor(Math.random()*w.length)];
   }
-  // Mix in seasonal quests (1-2 slots if event active)
-  try {
-    const event = getCurrentSeasonalEvent();
-    if (event) {
-      const seasonalPool = event.quests.filter(q => !used.has(q.t));
-      if (seasonalPool.length > 0) {
-        const slots = shuffle([0,1,2,3,4]).slice(0, Math.min(2, seasonalPool.length));
-        slots.forEach((slot, i) => { if (seasonalPool[i]) result[slot] = seasonalPool[i]; });
-      }
-    }
-  } catch(e) {}
+  // Add 1-2 joker quests as bonus slots (don't count toward 10)
+  if (jokerPool.length > 0) {
+    const numJokers = Math.random() < 0.5 ? 1 : 2;
+    shuffle(jokerPool).slice(0, numJokers).forEach(j => result.push(j));
+  }
   return result;
 }
 
@@ -1073,6 +1000,7 @@ function renderQuestCard(q, i) {
           <span class="diff-badge diff-${q.diff}">${DIFF_DE[q.diff]}</span>
           <span class="pts-inline pts-${q.diff}">+${pts} Pts</span>
           ${seen?`<span class="seen-badge" onclick="showQuestHistory('${q.t.replace(/'/g,"\\'")}')">📂 Verlauf</span>`:''}
+          ${q.joker?`<span style="font-size:0.6rem;color:#f59e0b;border:1px solid #f59e0b;padding:2px 7px;border-radius:100px">🃏 Joker</span>`:''}
           ${gps?`<span style="font-size:0.6rem;color:var(--accent3);border:1px solid var(--accent3);padding:2px 7px;border-radius:100px">🗺️ GPS</span>`:''}
           ${q.isCommunity&&!q.isGlobal?`<span style="font-size:0.6rem;color:var(--wild);border:1px solid var(--wild);padding:2px 7px;border-radius:100px">✍️ Community</span>`:''}
           ${q.isGlobal?`<span style="font-size:0.6rem;color:var(--accent3);border:1px solid var(--accent3);background:rgba(79,195,247,0.08);padding:2px 7px;border-radius:100px">🌍 Global</span>`:''}
@@ -1314,12 +1242,12 @@ window.confirmComplete = async function() {
       }
     }
 
-    const pts=DIFF_PTS[q.diff];
+    const pts = q.pts || DIFF_PTS[q.diff];
     score+=pts;
     const entry={
       title:q.t, diff:q.diff, cat:q.cat, emoji:q.e, pts,
-      date:todayKey(), notes:notes||null, photo:photoUrl||null
-      // localPhoto intentionally not saved — too large for localStorage
+      date:todayKey(), notes:notes||null, photo:photoUrl||null,
+      joker: q.joker || false
     };
     completed.unshift(entry);
     activeQuests[pendingIndex] = null;
