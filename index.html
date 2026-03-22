@@ -1824,6 +1824,12 @@ window.sendReaction = async function() {
   closeReactionModal();
   showToast('Reaktion gesendet! 📸');
   btn.disabled=false; btn.textContent='📸 Senden';
+  // Push notification to quest owner
+  sendPushToUser(
+    pendingReactionTargetUserId,
+    '📸 ' + (currentUser.displayName||'Jemand') + ' hat reagiert!',
+    'Jemand hat auf deine Quest reagiert — schau in den Feed!'
+  );
 };
 
 window.openCommentModal = function(completionId) {
@@ -2451,7 +2457,7 @@ window.toggleInviteAll = function() {
   el('inviteMemberList').style.display = inviteAllGroup ? 'none' : 'flex';
 };
 
-window.sendInvite = function() {
+window.sendInvite = async function() {
   const location = el('inviteLocation').value.trim();
   let timeText = '';
   if (inviteTimeMode === 'spontan') timeText = '⚡ Spontan';
@@ -2482,6 +2488,19 @@ window.sendInvite = function() {
   closeInviteModal();
   window.open(waUrl, '_blank');
   showToast('📲 WhatsApp wird geöffnet!');
+
+  // Also send push to group members via OneSignal
+  const locationText = location ? ` · 📍 ${location}` : '';
+  const pushBody = `${currentUser.displayName||'Jemand'} fragt: "${inviteQuestTitle}" — ${timeText}${locationText}. Kommst du mit?`;
+  try {
+    const gDoc = await getDoc(doc(db,'groups',groupId));
+    const members = (gDoc.data().members||[]).filter(uid => uid !== currentUser.uid);
+    // Send to selected members or whole group
+    const targets = inviteAllGroup ? members : [...inviteSelectedMembers];
+    for (const uid of targets) {
+      sendPushToUser(uid, '👋 Wer kommt mit?', pushBody);
+    }
+  } catch(e) {}
 };
 
 
@@ -4801,13 +4820,17 @@ async function sendPushToUser(targetUid, title, body) {
     const playerId = uDoc.data().osPlayerId;
     await fetch('https://onesignal.com/api/v1/notifications', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'os_v2_app_nqyev5uiivgi3pvdsuwoavqmyr4depk7ebvepvnc7hst2ulxjzddkz3c2vqipegvb3nmito3xv7a2t5r3e4aeqxd5cki7vonxo3rzby'
+      },
       body: JSON.stringify({
         app_id: '6c304af6-8845-4c8d-bea3-952ce0560cc4',
         include_subscription_ids: [playerId],
         headings: { en: title },
         contents: { en: body },
-        web_url: 'https://lion391.github.io/sidequests/'
+        web_url: 'https://lion391.github.io/sidequests/',
+        web_push_topic: 'sidequests'
       })
     });
   } catch(e) {}
@@ -4846,11 +4869,15 @@ async function checkAndNotify() {
     const myPts = ptsByUser[currentUser.uid] || 0;
     const myRank = Object.values(ptsByUser).filter(p => p > myPts).length + 1;
     now.rank = myRank;
-    if (prev.rank && myRank > prev.rank && Notification.permission === 'granted') {
-      new Notification('🏆 Überholt!', {
-        body: `Du bist auf Platz ${myRank} zurückgefallen. Hol auf!`,
-        icon: SQ_ICON, tag: 'sq-rank'
-      });
+    if (prev.rank && myRank > prev.rank) {
+      sendPushToUser(currentUser.uid, '🏆 Überholt!',
+        `Du bist auf Platz ${myRank} zurückgefallen. Hol auf!`);
+      if (Notification.permission === 'granted') {
+        new Notification('🏆 Überholt!', {
+          body: `Du bist auf Platz ${myRank} zurückgefallen. Hol auf!`,
+          icon: SQ_ICON, tag: 'sq-rank'
+        });
+      }
     }
 
     // Reaktionen
