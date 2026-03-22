@@ -1050,11 +1050,19 @@ function isGpsQuest(q) {
 // Track which quest index is currently "active" (started but not done)
 let activeQuestIndex = -1;
 
+function isInviteQuest(q) {
+  const keywords = ['picknick','joggen','laufen','wandern','velo','grillie','ausflug','schwimm','kanu','sup','sport','treffen','spazier','klettern','schlitteln','skifahren','snowboard','together','freunde','gruppe','zusammen','fussball','tennis','volleyball','team'];
+  const text = (q.t + q.d + q.cat).toLowerCase();
+  return keywords.some(k => text.includes(k));
+}
+
 function renderQuestCard(q, i) {
   const pts = DIFF_PTS[q.diff];
   const seen = hasPrevHistory(q.t);
   const gps = isGpsQuest(q) || (q.requiresGps && !((q.t+q.d).toLowerCase().includes('schwimm')));
+  const invite = isInviteQuest(q);
   const isActive = activeQuestIndex === i;
+  const cols = gps ? (invite ? '1fr 1fr 1fr 1fr 1fr' : '1fr 1fr 1fr 1fr') : (invite ? '1fr 1fr 1fr 1fr' : '1fr 1fr 1fr');
 
   return `<div class="quest-card ${isActive ? 'quest-active' : ''}" id="card-${i}">
     ${isActive ? `<div class="quest-active-bar">⏱ Läuft gerade...</div>` : ''}
@@ -1075,11 +1083,12 @@ function renderQuestCard(q, i) {
         <div class="quest-cat">${q.e} ${q.cat}</div>
       </div>
     </div>
-    <div class="quest-actions" style="grid-template-columns:${gps?'1fr 1fr 1fr 1fr':'1fr 1fr 1fr'}">
+    <div class="quest-actions" style="grid-template-columns:${cols}">
       ${gps?`<button class="action-btn" onclick="startQuestGps(${i})" style="color:var(--accent);border-right:1px solid var(--border)">▶ Start</button>`:''}
       <button class="action-btn btn-done" onclick="openProofModal(${i})" style="border-right:1px solid var(--border)">✅ Fertig</button>
       <button class="action-btn btn-skip" onclick="skipQuest(${i})" style="border-right:1px solid var(--border)">⏭ Skip</button>
-      <button class="action-btn" onclick="openTradeModal(${i})" style="color:var(--accent3)">🔄</button>
+      <button class="action-btn" onclick="openTradeModal(${i})" style="color:var(--accent3);border-right:${invite?'1px solid var(--border)':'none'}">🔄</button>
+      ${invite?`<button class="action-btn" onclick="openInviteModal('${q.t.replace(/'/g,"\\'")}')" style="color:#f59e0b">👋 Wer mit?</button>`:''}
     </div>
   </div>`;
 }
@@ -2076,7 +2085,104 @@ window.completeWeekQuest = async function() {
   showToast(`🌟 Wochenquest erledigt! +${wq.pts} Punkte!`, 3000);
 };
 
-// ── CHALLENGES ──
+// ── INVITE MODAL ──
+let inviteQuestTitle = '';
+let inviteTimeMode = 'spontan';
+let inviteAllGroup = true;
+let inviteSelectedMembers = new Set();
+
+window.openInviteModal = async function(questTitle) {
+  inviteQuestTitle = questTitle;
+  inviteTimeMode = 'spontan';
+  inviteAllGroup = true;
+  inviteSelectedMembers = new Set();
+  el('inviteQuestName').textContent = questTitle;
+  el('inviteDateTime').style.display = 'none';
+  el('inviteLocation').value = '';
+  el('inviteAllBtn').classList.add('active');
+  el('inviteAllBtn').textContent = '👥 Ganze Gruppe';
+  document.querySelectorAll('.invite-time-btn').forEach((b,i) => b.classList.toggle('active', i===0));
+
+  // Load members
+  try {
+    const gDoc = await getDoc(doc(db,'groups',groupId));
+    const members = (gDoc.data().members||[]).filter(uid => uid !== currentUser.uid);
+    const memberList = el('inviteMemberList');
+    memberList.innerHTML = '';
+    memberList.style.display = 'none';
+    for (const uid of members) {
+      const uDoc = await getDoc(doc(db,'users',uid));
+      const name = uDoc.exists() ? (uDoc.data().name||'Anonym') : 'Anonym';
+      const btn = document.createElement('button');
+      btn.className = 'invite-member-btn';
+      btn.textContent = name;
+      btn.dataset.uid = uid;
+      btn.dataset.name = name;
+      btn.onclick = () => {
+        btn.classList.toggle('selected');
+        if (btn.classList.contains('selected')) inviteSelectedMembers.add(uid);
+        else inviteSelectedMembers.delete(uid);
+      };
+      memberList.appendChild(btn);
+    }
+  } catch(e) {}
+
+  el('inviteModal').style.display = 'flex';
+};
+
+window.closeInviteModal = function() {
+  el('inviteModal').style.display = 'none';
+};
+
+window.selectInviteTime = function(btn, mode) {
+  inviteTimeMode = mode;
+  document.querySelectorAll('.invite-time-btn:not(#inviteAllBtn)').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  el('inviteDateTime').style.display = mode === 'custom' ? 'block' : 'none';
+};
+
+window.toggleInviteAll = function() {
+  inviteAllGroup = !inviteAllGroup;
+  const btn = el('inviteAllBtn');
+  btn.classList.toggle('active', inviteAllGroup);
+  btn.textContent = inviteAllGroup ? '👥 Ganze Gruppe' : '👤 Einzeln wählen';
+  el('inviteMemberList').style.display = inviteAllGroup ? 'none' : 'flex';
+};
+
+window.sendInvite = function() {
+  const location = el('inviteLocation').value.trim();
+  let timeText = '';
+  if (inviteTimeMode === 'spontan') timeText = '⚡ Spontan';
+  else if (inviteTimeMode === 'heute') timeText = 'Heute';
+  else if (inviteTimeMode === 'morgen') timeText = 'Morgen';
+  else if (inviteTimeMode === 'custom') {
+    const dt = el('inviteDateTime').value;
+    if (dt) {
+      const d = new Date(dt);
+      timeText = d.toLocaleDateString('de-CH', {weekday:'short',day:'numeric',month:'short'}) + ' um ' + d.toLocaleTimeString('de-CH',{hour:'2-digit',minute:'2-digit'});
+    } else timeText = 'Datum offen';
+  }
+
+  const appUrl = 'https://lion391.github.io/sidequests/';
+
+  // Build WhatsApp message
+  let msg = `👋 *SideQuest Einladung*\n\n`;
+  msg += `🎯 *Quest:* ${inviteQuestTitle}\n`;
+  msg += `⏰ *Wann:* ${timeText}\n`;
+  if (location) msg += `📍 *Wo:* ${location}\n`;
+  msg += `\nKommst du mit? 😄\n`;
+  msg += `_(SideQuest App: ${appUrl})_`;
+
+  // Build ticket card for sharing (as text)
+  const ticketMsg = encodeURIComponent(msg);
+  const waUrl = `https://wa.me/?text=${ticketMsg}`;
+
+  closeInviteModal();
+  window.open(waUrl, '_blank');
+  showToast('📲 WhatsApp wird geöffnet!');
+};
+
+
 window.openCreateChallenge = async function() {
   el('challengeDesc').value = '';
   el('challengePts').value = '';
@@ -3299,7 +3405,10 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .feed-avatar{width:36px;height:36px;border-radius:50%;background:var(--accent);color:var(--bg);display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:1rem;flex-shrink:0;}
 .feed-username{font-family:'Syne',sans-serif;font-weight:700;font-size:0.9rem;}
 .feed-time{font-size:0.7rem;color:var(--muted);margin-top:2px;}
-.feed-photo{width:100%;max-height:300px;object-fit:cover;}
+.invite-time-btn{padding:7px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:100px;color:var(--muted);font-size:0.78rem;cursor:pointer;transition:all 0.15s}
+.invite-time-btn.active{background:var(--accent);color:var(--bg);border-color:var(--accent);font-weight:700}
+.invite-member-btn{padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:100px;color:var(--text);font-size:0.78rem;cursor:pointer;transition:all 0.15s}
+.invite-member-btn.selected{background:#f59e0b22;border-color:#f59e0b;color:#f59e0b;font-weight:700}
 .feed-note{font-size:0.78rem;color:var(--muted);padding:10px 16px;font-style:italic;}
 .feed-reactions{padding:0 16px;display:flex;flex-wrap:wrap;gap:8px;}
 .reaction-item{display:flex;align-items:center;gap:6px;background:var(--surface2);border-radius:100px;padding:4px 10px;cursor:pointer;font-size:0.72rem;}
@@ -3613,6 +3722,43 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       <div class="section-title" id="localHistoryTitle" style="display:none">Deine erledigten Quests</div>
       <div id="localHistoryList"></div>
     </div>
+  </div>
+</div>
+
+<!-- INVITE MODAL -->
+<div class="modal-backdrop" id="inviteModal" style="display:none">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">👋 Wer kommt mit?</div>
+    <div class="modal-sub" id="inviteQuestName"></div>
+
+    <!-- Time -->
+    <div style="margin-bottom:14px">
+      <div style="font-size:0.72rem;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Wann?</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="invite-time-btn active" onclick="selectInviteTime(this,'spontan')">⚡ Spontan</button>
+        <button class="invite-time-btn" onclick="selectInviteTime(this,'heute')">Heute</button>
+        <button class="invite-time-btn" onclick="selectInviteTime(this,'morgen')">Morgen</button>
+        <button class="invite-time-btn" onclick="selectInviteTime(this,'custom')">Datum wählen</button>
+      </div>
+      <input type="datetime-local" id="inviteDateTime" style="display:none;width:100%;margin-top:8px;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:0.85rem">
+    </div>
+
+    <!-- Location -->
+    <div style="margin-bottom:14px">
+      <div style="font-size:0.72rem;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Wo? (optional)</div>
+      <input type="text" id="inviteLocation" placeholder="z.B. Bern Marzili, Aare..." style="width:100%;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:0.85rem">
+    </div>
+
+    <!-- Who -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:0.72rem;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Wen einladen?</div>
+      <button class="invite-time-btn active" id="inviteAllBtn" onclick="toggleInviteAll()">👥 Ganze Gruppe</button>
+      <div id="inviteMemberList" style="display:none;margin-top:8px;display:flex;flex-wrap:wrap;gap:6px"></div>
+    </div>
+
+    <button class="btn-confirm" onclick="sendInvite()" style="margin-bottom:8px">📲 Einladung senden</button>
+    <button class="btn-cancel" onclick="closeInviteModal()">Abbrechen</button>
   </div>
 </div>
 
