@@ -3662,6 +3662,36 @@ window.shareInviteLink = function() {
 // ── SAISONALE EVENTS ──
 
 
+window.debugOneSignal = async function() {
+  let msg = '🔔 OneSignal Debug:\n\n';
+  try {
+    // Check if SDK loaded
+    msg += window.OneSignal ? '✅ SDK geladen\n' : '❌ SDK NICHT geladen\n';
+
+    if (window.OneSignal) {
+      // Check permission
+      const perm = window.OneSignal.Notifications.permission;
+      msg += perm ? '✅ Berechtigung erteilt\n' : '❌ Keine Berechtigung\n';
+
+      // Check subscription
+      const sub = window.OneSignal.User.PushSubscription;
+      const id = sub?.id;
+      msg += id ? `✅ Player ID: ${id.substring(0,8)}...\n` : '❌ Keine Player ID\n';
+      const optedIn = sub?.optedIn;
+      msg += optedIn ? '✅ Opted In\n' : '❌ Nicht Opted In\n';
+
+      // Try to save if we have ID
+      if (id && currentUser) {
+        await updateDoc(doc(db,'users',currentUser.uid), { osPlayerId: id });
+        msg += '✅ Player ID in Firestore gespeichert!\n';
+      }
+    }
+  } catch(e) {
+    msg += '❌ Fehler: ' + e.message + '\n';
+  }
+  alert(msg);
+};
+
 window.confirmResetPoints = function() {
   el('settingsModal').style.display = 'none';
   el('confirmResetModal').style.display = 'flex';
@@ -4345,7 +4375,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <button class="btn-cancel" style="margin-bottom:8px;color:var(--medium);border-color:var(--medium)" onclick="confirmResetPoints()">🔄 Meine Punkte zurücksetzen</button>
     <button class="btn-cancel" style="margin-bottom:20px;color:var(--hard);border-color:var(--hard)" onclick="confirmDeleteGroup()">🗑️ Gruppe löschen</button>
 
-    <button class="btn-cancel" onclick="document.getElementById('settingsModal').style.display='none'">Schliessen</button>
+    <button class="btn-cancel" style="margin-bottom:8px;color:#f59e0b;border-color:#f59e0b" onclick="debugOneSignal()">🔔 Push Notification Test</button>
   </div>
 </div>
 
