@@ -120,7 +120,6 @@ function showTab(id) {
   if (id === 'feed') loadFeed();
   if (id === 'leaderboard') loadLeaderboard();
   if (id === 'fitness') loadFitnessTab();
-  if (id === 'chat') loadChatTab();
 }
 window.showTab = showTab;
 window.showToast = showToast;
@@ -453,77 +452,47 @@ function renderSeasonalQuests() {
 
   if (activeEvents.length === 0) { box.style.display = 'none'; return; }
   box.style.display = 'block';
-  list.innerHTML = '';
 
-  activeEvents.forEach(event => {
+  list.innerHTML = activeEvents.map(event => {
     const id = 'seasonal_' + event.name.replace(/\s/g,'');
-    const completedCount = event.quests.filter((_,i) =>
-      localStorage.getItem('sq_seasonal_' + event.name + '_' + i) === todayKey()
-    ).length;
-
-    // Build accordion wrapper
-    const wrapper = document.createElement('div');
-    wrapper.style.cssText = 'background:var(--surface);border:2px solid ' + event.color + '55;border-radius:16px;margin-bottom:10px;overflow:hidden';
-
-    // Header button
-    const header = document.createElement('button');
-    header.style.cssText = 'width:100%;padding:14px 16px;background:' + event.color + '11;border:none;display:flex;align-items:center;justify-content:space-between;cursor:pointer';
-    header.onclick = () => toggleSeasonAccordion(id);
-    header.innerHTML =
-      '<span style="display:flex;align-items:center;gap:10px">' +
-        '<span style="font-size:1.5rem">' + event.emoji + '<\/span>' +
-        '<span style="text-align:left">' +
-          '<div style="font-weight:800;font-size:0.9rem;color:' + event.color + '">' + event.name + '<\/div>' +
-          '<div style="font-size:0.68rem;color:var(--muted)">' + completedCount + '/' + event.quests.length + ' erledigt<\/div>' +
-        '<\/span>' +
-      '<\/span>' +
-      '<span id="' + id + '_chevron" style="font-size:0.8rem;color:var(--muted)">&#9660;<\/span>';
-
-    // Content
-    const contentDiv = document.createElement('div');
-    contentDiv.id = id;
-    contentDiv.style.cssText = 'display:none;border-top:1px solid ' + event.color + '33';
-
-    event.quests.forEach((q, i) => {
-      const pts = q.pts || DIFF_PTS[q.diff];
-      const done = localStorage.getItem('sq_seasonal_' + event.name + '_' + i) === todayKey();
-
-      const card = document.createElement('div');
-      card.style.cssText = 'padding:14px 16px;border-bottom:1px solid var(--border);opacity:' + (done ? '0.5' : '1');
-
-      const top = document.createElement('div');
-      top.style.cssText = 'display:flex;gap:10px;align-items:flex-start';
-      top.innerHTML =
-        '<div style="font-size:1.3rem">' + q.e + '<\/div>' +
-        '<div style="flex:1">' +
-          '<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;flex-wrap:wrap">' +
-            '<span class="diff-badge diff-' + q.diff + '">' + DIFF_DE[q.diff] + '<\/span>' +
-            '<span class="pts-inline pts-' + q.diff + '">+' + pts + ' Pts<\/span>' +
-          '<\/div>' +
-          '<div style="font-family:var(--font-syne,sans-serif);font-weight:700;font-size:0.9rem;margin-bottom:3px">' + q.t + '<\/div>' +
-          '<div style="font-size:0.72rem;color:var(--muted);line-height:1.5">' + q.d + '<\/div>' +
-        '<\/div>';
-      card.appendChild(top);
-
-      if (done) {
-        const doneDiv = document.createElement('div');
-        doneDiv.style.cssText = 'margin-top:8px;font-size:0.72rem;color:var(--muted)';
-        doneDiv.textContent = '✅ Heute erledigt';
-        card.appendChild(doneDiv);
-      } else {
-        const btn = document.createElement('button');
-        btn.style.cssText = 'width:100%;margin-top:10px;padding:9px;background:' + event.color + '22;color:' + event.color + ';border:1px solid ' + event.color + '66;border-radius:10px;font-weight:700;font-size:0.78rem;cursor:pointer';
-        btn.textContent = '✅ Erledigt! +' + pts + ' Pts';
-        btn.onclick = () => completeSeasonalQuest(i, event.name);
-        card.appendChild(btn);
-      }
-      contentDiv.appendChild(card);
-    });
-
-    wrapper.appendChild(header);
-    wrapper.appendChild(contentDiv);
-    list.appendChild(wrapper);
-  });
+    const completedCount = event.quests.filter((_,i) => localStorage.getItem('sq_seasonal_'+event.name+'_'+i) === todayKey()).length;
+    return '<div style="background:var(--surface);border:2px solid '+event.color+'55;border-radius:16px;margin-bottom:10px;overflow:hidden">' +
+      '<button onclick="toggleSeasonAccordion(''+id+'')" style="width:100%;padding:14px 16px;background:'+event.color+'11;border:none;display:flex;align-items:center;justify-content:space-between;cursor:pointer">' +
+        '<span style="display:flex;align-items:center;gap:10px">' +
+          '<span style="font-size:1.5rem">'+event.emoji+'</span>' +
+          '<span>' +
+            '<div style="font-family:'Syne',sans-serif;font-weight:800;font-size:0.9rem;color:'+event.color+';text-align:left">'+event.name+'</div>' +
+            '<div style="font-size:0.68rem;color:var(--muted);text-align:left">'+completedCount+'/'+event.quests.length+' erledigt</div>' +
+          '</span>' +
+        '</span>' +
+        '<span id="'+id+'_chevron" style="font-size:0.8rem;color:var(--muted)">▼</span>' +
+      '</button>' +
+      '<div id="'+id+'" style="display:none;border-top:1px solid '+event.color+'33">' +
+        event.quests.map((q,i) => {
+          const pts = q.pts || DIFF_PTS[q.diff];
+          const doneKey = 'sq_seasonal_'+event.name+'_'+i;
+          const done = localStorage.getItem(doneKey) === todayKey();
+          return '<div style="padding:14px 16px;border-bottom:1px solid var(--border);opacity:'+(done?'0.5':'1')+'">' +
+            '<div style="display:flex;gap:10px;align-items:flex-start">' +
+              '<div style="font-size:1.3rem">'+q.e+'</div>' +
+              '<div style="flex:1">' +
+                '<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;flex-wrap:wrap">' +
+                  '<span class="diff-badge diff-'+q.diff+'">'+DIFF_DE[q.diff]+'</span>' +
+                  '<span class="pts-inline pts-'+q.diff+'">+'+pts+' Pts</span>' +
+                '</div>' +
+                '<div style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.9rem;margin-bottom:3px">'+q.t+'</div>' +
+                '<div style="font-size:0.72rem;color:var(--muted);line-height:1.5">'+q.d+'</div>' +
+              '</div>' +
+            '</div>' +
+            (done
+              ? '<div style="margin-top:8px;font-size:0.72rem;color:var(--muted)">✅ Heute erledigt</div>'
+              : '<button onclick="completeSeasonalQuest('+i+',''+event.name+'')" style="width:100%;margin-top:10px;padding:9px;background:'+event.color+'22;color:'+event.color+';border:1px solid '+event.color+'66;border-radius:10px;font-family:'Syne',sans-serif;font-weight:700;font-size:0.78rem;cursor:pointer">✅ Erledigt! +'+pts+' Pts</button>'
+            ) +
+          '</div>';
+        }).join('') +
+      '</div>' +
+    '</div>';
+  }).join('');
 }
 
 window.toggleSeasonAccordion = function(id) {
@@ -605,7 +574,6 @@ function initMain() {
   loadWeekQuest();
   checkDuellNotifications();
   renderSeasonalQuests();
-  updateChatBadge();
   setTimeout(() => { try { cleanupOldFeedEntries(); } catch(e) {} }, 2000);
   initPushNotifications();
   scheduleMidnightCleanup();
@@ -1052,7 +1020,7 @@ function isGpsQuest(q) {
 let activeQuestIndex = -1;
 
 function renderQuestCard(q, i) {
-  const pts = q.isQuestOfDay ? q.pts : DIFF_PTS[q.diff];
+  const pts = DIFF_PTS[q.diff];
   const seen = hasPrevHistory(q.t);
   const gps = isGpsQuest(q) || (q.requiresGps && !((q.t+q.d).toLowerCase().includes('schwimm')));
   const isActive = activeQuestIndex === i;
@@ -1064,8 +1032,7 @@ function renderQuestCard(q, i) {
       <div class="quest-body">
         <div class="quest-meta">
           <span class="diff-badge diff-${q.diff}">${DIFF_DE[q.diff]}</span>
-          <span class="pts-inline pts-${q.diff}">+${pts} Pts${q.isQuestOfDay?' ×2':''}</span>
-          ${q.isQuestOfDay?`<span style="font-size:0.6rem;color:#f59e0b;border:1px solid #f59e0b;background:#f59e0b18;padding:2px 7px;border-radius:100px">⭐ Quest des Tages</span>`:''}
+          <span class="pts-inline pts-${q.diff}">+${pts} Pts</span>
           ${seen?`<span class="seen-badge" onclick="showQuestHistory('${q.t.replace(/'/g,"\\'")}')">📂 Verlauf</span>`:''}
           ${gps?`<span style="font-size:0.6rem;color:var(--accent3);border:1px solid var(--accent3);padding:2px 7px;border-radius:100px">🗺️ GPS</span>`:''}
           ${q.isCommunity&&!q.isGlobal?`<span style="font-size:0.6rem;color:var(--wild);border:1px solid var(--wild);padding:2px 7px;border-radius:100px">✍️ Community</span>`:''}
@@ -1107,8 +1074,6 @@ window.loadAllQuests = async function() {
   btn.disabled=true; btn.innerHTML='<div class="spinner"></div> Laden...';
   el('questList').innerHTML=[0,1,2,3,4].map(i=>renderSkeleton(i)).join('');
   const picked=pickQuests();
-  // Mark one random quest as Quest of the Day (2x points)
-  const pickedWithQod = markQuestOfDay(picked);
 
   // Mix in community quests (~30% chance, max 2 slots)
   try {
@@ -1118,21 +1083,19 @@ window.loadAllQuests = async function() {
       const available = communityPool.filter(q => !usedTitles.has(q.t));
       if (available.length > 0) {
         const slots = shuffle([0,1,2,3,4]).slice(0, Math.min(2, available.length));
-        slots.forEach((slot, i) => { if(available[i]) pickedWithQod[slot] = available[i]; });
+        slots.forEach((slot, i) => { if(available[i]) picked[slot] = available[i]; });
       }
     }
   } catch(e) { /* silently ignore */ }
   for(let i=0;i<5;i++){
-    activeQuests[i]=pickedWithQod[i];
+    activeQuests[i]=picked[i];
     await new Promise(r=>setTimeout(r,100));
     const sk=el('card-'+i);
-    if(sk) sk.outerHTML=renderQuestCard(pickedWithQod[i],i);
+    if(sk) sk.outerHTML=renderQuestCard(picked[i],i);
   }
-  isLoading=false;
-  btn.disabled=false;
+  isLoading=false; btn.disabled=false; btn.style.display='none';
   btn.innerHTML='<span>⚡</span> 5 neue Sidequests';
-  btn.style.display='none';
-  saveActiveQuests();
+  saveActiveQuests(); // persist so they survive app close/group switch
   updateMainUI();
 };
 
@@ -1561,12 +1524,6 @@ async function loadFeed() {
         ${c.photoUrl?`<img class="feed-photo" src="${c.photoUrl}" alt="Beweis" onclick="openPhotoLightbox('${c.photoUrl}')" style="cursor:zoom-in">` : ''}
         ${c.notes?`<div class="feed-note">"${c.notes}"</div>`:''}
         <div class="feed-reactions" id="reactions-${d.id}"></div>
-        <div style="display:flex;align-items:center;gap:6px;padding:6px 12px 2px;flex-wrap:wrap">
-          <div id="emojireacts-${d.id}" style="display:flex;gap:4px;flex-wrap:wrap;flex:1"></div>
-          ${isMe ? '' : `<div style="display:flex;gap:6px">
-            ${['👏','🔥','😂','❤️','💀'].map(e=>`<button onclick="sendEmojiReact('${d.id}','${c.userId}','${e}')" style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 8px;font-size:0.85rem;cursor:pointer">${e}</button>`).join('')}
-          </div>`}
-        </div>
         ${isMe ? '' : `<div class="feed-react-bar">
           <button class="react-btn" onclick="openReactionModal('${d.id}','${c.userId}')">📸 Reaktion</button>
           <button class="react-btn" onclick="openCommentModal('${d.id}')">💬 Kommentar</button>
@@ -1574,10 +1531,7 @@ async function loadFeed() {
       </div>`;
     }).join('');
     // Load reactions for each
-    snap.docs.forEach(d => {
-      loadReactions(d.id);
-      loadEmojiReacts(d.id);
-    });
+    snap.docs.forEach(d=>loadReactions(d.id));
   });
 }
 
@@ -2062,15 +2016,6 @@ async function loadWeekQuest() {
   if(done) box.style.borderColor = 'var(--accent)';
 }
 
-window.toggleWeekQuestDesc = function() {
-  const details = el('weekQuestDetails');
-  const chevron = el('weekQuestChevron');
-  if (!details) return;
-  const open = details.style.display === 'none';
-  details.style.display = open ? 'block' : 'none';
-  if (chevron) chevron.textContent = open ? '▲' : '▼';
-};
-
 window.completeWeekQuest = async function() {
   const wq = getWeekQuestForGroup();
   if(localStorage.getItem(weekQuestKey()) === 'done') return;
@@ -2525,240 +2470,7 @@ function openFitnessTrackerInner(mode, questIdx) {
   el('gpsModal').style.display = 'flex';
 }
 
-// ── EMOJI REACTIONS ──
-window.sendEmojiReact = async function(completionId, targetUserId, emoji) {
-  try {
-    // Check if already reacted with this emoji
-    const reactsRef = collection(db,'completions',completionId,'emojireacts');
-    const existing = await getDocs(query(reactsRef,
-      where('userId','==',currentUser.uid),
-      where('emoji','==',emoji)));
-    if (!existing.empty) {
-      // Toggle off
-      await deleteDoc(doc(db,'completions',completionId,'emojireacts',existing.docs[0].id));
-    } else {
-      await addDoc(reactsRef, {
-        userId: currentUser.uid,
-        userName: currentUser.displayName||'Anonym',
-        emoji, createdAt: serverTimestamp()
-      });
-    }
-    loadEmojiReacts(completionId);
-  } catch(e) {}
-};
-
-async function loadEmojiReacts(completionId) {
-  const container = el('emojireacts-'+completionId);
-  if (!container) return;
-  try {
-    const snap = await getDocs(collection(db,'completions',completionId,'emojireacts'));
-    const counts = {};
-    snap.docs.forEach(d => {
-      const e = d.data().emoji;
-      counts[e] = (counts[e]||[]);
-      counts[e].push(d.data().userName);
-    });
-    container.innerHTML = Object.entries(counts).map(([emoji, users]) =>
-      `<button onclick="sendEmojiReact('${completionId}','','${emoji}')" style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 9px;font-size:0.82rem;cursor:pointer;display:flex;align-items:center;gap:4px">
-        ${emoji} <span style="font-size:0.72rem;color:var(--muted)">${users.length}</span>
-      </button>`
-    ).join('');
-  } catch(e) {}
-}
-
-// ── CHAT ──
-let currentChatUid = null;
-let currentChatName = null;
-let chatUnsubscribe = null;
-
-function getChatId(uid1, uid2) {
-  return [uid1, uid2].sort().join('_');
-}
-
-async function loadChatTab() {
-  if (!groupId || !currentUser) return;
-  el('chatView-list').style.display = 'block';
-  el('chatView-convo').style.display = 'none';
-
-  const gDoc = await getDoc(doc(db,'groups',groupId));
-  const members = (gDoc.data().members||[]).filter(uid => uid !== currentUser.uid);
-
-  // Load all member info
-  const memberInfos = [];
-  for (const uid of members) {
-    const uDoc = await getDoc(doc(db,'users',uid));
-    const name = uDoc.exists() ? uDoc.data().name : 'Anonym';
-    // Check for unread messages
-    const chatId = getChatId(currentUser.uid, uid);
-    let unread = 0;
-    let lastMsg = '';
-    let lastAt = 0;
-    try {
-      const chatDoc = await getDoc(doc(db,'messages',chatId));
-      if (chatDoc.exists()) {
-        unread = (chatDoc.data().unread||{})[currentUser.uid] || 0;
-        lastMsg = chatDoc.data().lastMsg || '';
-        lastAt = chatDoc.data().lastAt?.seconds || 0;
-      }
-    } catch(e) {}
-    memberInfos.push({ uid, name, unread, lastMsg, lastAt });
-  }
-
-  // Sort: unread first, then by lastAt desc, then alphabetical
-  memberInfos.sort((a,b) => {
-    if (b.unread !== a.unread) return b.unread - a.unread;
-    if (b.lastAt !== a.lastAt) return b.lastAt - a.lastAt;
-    return a.name.localeCompare(b.name);
-  });
-
-  const listEl = el('chatMemberList');
-  if (!listEl) return;
-  listEl.innerHTML = '';
-
-  if (memberInfos.length === 0) {
-    listEl.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:0.8rem">Noch keine anderen Mitglieder in der Gruppe.</div>';
-    return;
-  }
-
-  memberInfos.forEach(({ uid, name, unread, lastMsg, lastAt }) => {
-    const div = document.createElement('div');
-    div.style.cssText = 'display:flex;align-items:center;gap:12px;padding:13px 14px;background:var(--surface);border:1px solid ' + (unread > 0 ? 'var(--accent)' : 'var(--border)') + ';border-radius:14px;margin-bottom:8px;cursor:pointer;transition:opacity 0.15s';
-    div.onclick = () => openChatWith(uid, name);
-
-    const timeStr = lastAt ? new Date(lastAt*1000).toLocaleTimeString('de-CH',{hour:'2-digit',minute:'2-digit'}) : '';
-
-    div.innerHTML =
-      '<div style="width:42px;height:42px;border-radius:50%;background:var(--surface2);border:2px solid ' + (unread > 0 ? 'var(--accent)' : 'var(--border)') + ';display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.1rem;flex-shrink:0">' + name[0].toUpperCase() + '</div>' +
-      '<div style="flex:1;min-width:0">' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">' +
-          '<div style="font-weight:700;font-size:0.92rem">' + name + '</div>' +
-          (timeStr ? '<div style="font-size:0.65rem;color:var(--muted)">' + timeStr + '</div>' : '') +
-        '</div>' +
-        '<div style="font-size:0.72rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (lastMsg || 'Tippe zum Schreiben') + '</div>' +
-      '</div>' +
-      (unread > 0 ? '<div style="background:var(--accent);color:var(--bg);font-size:0.65rem;font-weight:800;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + unread + '</div>' : '');
-    listEl.appendChild(div);
-  });
-}
-
-window.openChatWith = async function(uid, name) {
-  currentChatUid = uid;
-  currentChatName = name;
-  el('chatView-list').style.display = 'none';
-  const convoEl = el('chatView-convo');
-  convoEl.style.display = 'flex';
-  el('chatConvoName').textContent = name;
-  el('chatMessages').innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:0.8rem">Lade...</div>';
-
-  const chatId = getChatId(currentUser.uid, uid);
-
-  // Mark as read
-  try {
-    const chatRef = doc(db,'messages',chatId);
-    const chatDoc = await getDoc(chatRef);
-    if (chatDoc.exists()) {
-      const unread = chatDoc.data().unread || {};
-      unread[currentUser.uid] = 0;
-      await updateDoc(chatRef, { unread });
-      updateChatBadge();
-    }
-  } catch(e) {}
-
-  // Listen for messages realtime
-  if (chatUnsubscribe) chatUnsubscribe();
-  const msgsRef = collection(db,'messages',chatId,'msgs');
-  chatUnsubscribe = onSnapshot(query(msgsRef, orderBy('createdAt','asc')), snap => {
-    const container = el('chatMessages');
-    if (!container) return;
-    if (snap.empty) {
-      container.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:0.8rem">Noch keine Nachrichten 👋</div>';
-      return;
-    }
-    container.innerHTML = snap.docs.map(d => {
-      const m = d.data();
-      const isMe = m.userId === currentUser.uid;
-      const time = m.createdAt?.toDate?.()?.toLocaleTimeString('de-CH',{hour:'2-digit',minute:'2-digit'}) || '';
-      return '<div style="display:flex;justify-content:' + (isMe?'flex-end':'flex-start') + '">' +
-        '<div style="max-width:78%;padding:9px 13px;border-radius:' + (isMe?'18px 18px 4px 18px':'18px 18px 18px 4px') + ';background:' + (isMe?'var(--accent)':'var(--surface)') + ';color:' + (isMe?'var(--bg)':'var(--text)') + ';font-size:0.88rem;border:' + (isMe?'none':'1px solid var(--border)') + '">' +
-          '<div style="word-break:break-word">' + m.text.replace(/</g,'&lt;') + '</div>' +
-          '<div style="font-size:0.6rem;opacity:0.55;margin-top:3px;text-align:right">' + time + '</div>' +
-        '</div>' +
-      '</div>';
-    }).join('');
-    container.scrollTop = container.scrollHeight;
-  });
-};
-
-window.closeChatConvo = function() {
-  if (chatUnsubscribe) { chatUnsubscribe(); chatUnsubscribe = null; }
-  currentChatUid = null;
-  el('chatView-convo').style.display = 'none';
-  el('chatView-list').style.display = 'block';
-  loadChatTab(); // refresh list with updated order
-};
-
-window.sendChatMessage = async function() {
-  const input = el('chatInput');
-  const text = input.value.trim();
-  if (!text || !currentChatUid) return;
-  input.value = '';
-  input.style.height = 'auto';
-
-  const chatId = getChatId(currentUser.uid, currentChatUid);
-  const chatRef = doc(db,'messages',chatId);
-
-  try {
-    await addDoc(collection(db,'messages',chatId,'msgs'), {
-      userId: currentUser.uid,
-      userName: currentUser.displayName||'Anonym',
-      text, createdAt: serverTimestamp()
-    });
-    const chatDoc = await getDoc(chatRef);
-    const unread = chatDoc.exists() ? (chatDoc.data().unread||{}) : {};
-    unread[currentChatUid] = (unread[currentChatUid]||0) + 1;
-    const data = {
-      participants: [currentUser.uid, currentChatUid],
-      lastMsg: text.length > 50 ? text.slice(0,50)+'...' : text,
-      lastAt: serverTimestamp(),
-      unread
-    };
-    if (chatDoc.exists()) await updateDoc(chatRef, data);
-    else await setDoc(chatRef, data);
-  } catch(e) { showToast('Fehler: ' + e.message); }
-};
-
-// Enter to send (no shift)
-document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey && document.activeElement === el('chatInput')) {
-    e.preventDefault();
-    sendChatMessage();
-  }
-});
-
-async function updateChatBadge() {
-  try {
-    const q = query(collection(db,'messages'), where('participants','array-contains',currentUser.uid));
-    const snap = await getDocs(q);
-    let total = 0;
-    snap.docs.forEach(d => { total += (d.data().unread||{})[currentUser.uid]||0; });
-    const badge = el('chatUnreadBadge');
-    if (!badge) return;
-    if (total > 0) { badge.style.display='inline'; badge.textContent=total; }
-    else { badge.style.display='none'; }
-  } catch(e) {}
-}
-
-// ── QUEST DES TAGES (2x Punkte, zufällig in den 5) ──
-function markQuestOfDay(quests) {
-  if (!quests || quests.length === 0) return quests;
-  const key = 'sq_qod_' + todayKey();
-  let idx = parseInt(localStorage.getItem(key));
-  if (isNaN(idx)) {
-    idx = Math.floor(Math.random() * quests.length);
-    localStorage.setItem(key, idx);
-  }
-  return quests.map((q, i) => i === idx ? {...q, isQuestOfDay: true, pts: (DIFF_PTS[q.diff]||10) * 2} : q);
-}
+// ── FITNESS TAB ──
 async function loadFitnessTab() {
   const week = getWeekNumber();
   const year = new Date().getFullYear();
@@ -3754,30 +3466,20 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       <button class="tab-btn" id="tabBtn-feed" onclick="showTab('feed')">👥 Feed</button>
       <button class="tab-btn" id="tabBtn-leaderboard" onclick="showTab('leaderboard')">🏆 Liga</button>
       <button class="tab-btn" id="tabBtn-fitness" onclick="showTab('fitness')">🏃 Fitness</button>
-      <button class="tab-btn" id="tabBtn-chat" onclick="showTab('chat')">💬 Chat<span id="chatUnreadBadge" style="display:none;background:var(--hard);color:#fff;font-size:0.55rem;font-weight:700;padding:1px 5px;border-radius:100px;margin-left:3px;vertical-align:middle"></span></button>
     </div>
 
     <!-- QUESTS TAB -->
     <div class="tab-content" id="tab-quests">
-      <!-- SEASONAL QUESTS BOX (above week quest) -->
-      <div id="seasonalQuestBox" style="display:none;margin-bottom:14px">
-        <div id="seasonalQuestList"></div>
-      </div>
-
-      <div id="weekQuestBox" style="display:none;background:var(--surface);border:2px solid #c084fc;border-radius:18px;overflow:hidden;margin-bottom:14px">
-        <button onclick="toggleWeekQuestDesc()" style="width:100%;padding:14px 16px;background:#c084fc18;border:none;display:flex;align-items:center;justify-content:space-between;cursor:pointer;text-align:left">
-          <span>
-            <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:0.75rem;color:var(--wild);margin-bottom:4px">🌟 WOCHENQUEST · <span id="weekQuestDaysLeft"></span></div>
-            <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;color:var(--text)" id="weekQuestTitle"></div>
-          </span>
-          <span id="weekQuestChevron" style="font-size:0.8rem;color:var(--muted);flex-shrink:0;margin-left:10px">▼</span>
-        </button>
-        <div id="weekQuestDetails" style="display:none;padding:0 16px 14px;border-top:1px solid var(--border)">
-          <div style="font-size:0.75rem;color:var(--muted);line-height:1.5;margin:10px 0 12px" id="weekQuestDesc"></div>
-          <div style="display:flex;align-items:center;justify-content:space-between">
-            <span style="font-family:'Syne',sans-serif;font-weight:800;color:var(--wild)" id="weekQuestPts"></span>
-            <button id="weekQuestBtn" class="btn-confirm" style="width:auto;padding:8px 16px;font-size:0.8rem" onclick="completeWeekQuest()">✅ Erledigt!</button>
-          </div>
+      <div id="weekQuestBox" style="display:none;background:var(--surface);border:2px solid var(--wild);border-radius:18px;padding:16px;margin-bottom:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:0.8rem;color:var(--wild)">🌟 WOCHENQUEST</span>
+          <span style="font-size:0.7rem;color:var(--muted)" id="weekQuestDaysLeft"></span>
+        </div>
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;margin-bottom:4px" id="weekQuestTitle"></div>
+        <div style="font-size:0.75rem;color:var(--muted);line-height:1.5;margin-bottom:12px" id="weekQuestDesc"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-family:'Syne',sans-serif;font-weight:800;color:var(--wild)" id="weekQuestPts"></span>
+          <button id="weekQuestBtn" class="btn-confirm" style="width:auto;padding:8px 16px;font-size:0.8rem" onclick="completeWeekQuest()">✅ Erledigt!</button>
         </div>
       </div>
 
@@ -3815,6 +3517,10 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         <div class="quest-placeholder"><span style="font-size:2rem;display:block;margin-bottom:8px">✨</span>Drück den Knopf — 5 Abenteuer warten!</div>
       </div>
 
+      <!-- SEASONAL QUESTS BOX -->
+      <div id="seasonalQuestBox" style="display:none;margin-top:14px">
+        <div id="seasonalQuestList"></div>
+      </div>
     </div>
 
     <!-- FEED TAB -->
@@ -3857,27 +3563,11 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       <div id="fitnessRunList"></div>
     </div>
 
-    <!-- CHAT TAB -->
-    <div class="tab-content" id="tab-chat" style="display:none">
-      <!-- List view -->
-      <div id="chatView-list">
-        <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:12px">💬 Direktnachrichten</div>
-        <div id="chatMemberList"></div>
-      </div>
-      <!-- Convo view -->
-      <div id="chatView-convo" style="display:none;flex-direction:column;height:calc(100vh - 200px)">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)">
-          <button onclick="closeChatConvo()" style="background:transparent;border:none;color:var(--accent);font-size:1.1rem;cursor:pointer;padding:0">←</button>
-          <div id="chatConvoName" style="font-family:'Syne',sans-serif;font-weight:800;font-size:1rem;flex:1"></div>
-        </div>
-        <div id="chatMessages" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:10px;min-height:0"></div>
-        <div style="display:flex;gap:8px;padding-top:8px;align-items:flex-end;border-top:1px solid var(--border)">
-          <textarea id="chatInput" placeholder="Nachricht..." rows="1" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:10px 14px;color:var(--text);font-size:0.9rem;resize:none;font-family:inherit;max-height:100px" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
-          <button onclick="sendChatMessage()" style="background:var(--accent);color:var(--bg);border:none;border-radius:50%;width:42px;height:42px;font-size:1.2rem;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center">↑</button>
-        </div>
-      </div>
+    <!-- HISTORY TAB -->
+    <div class="tab-content" id="tab-history" style="display:none">
+      <div class="section-title" id="localHistoryTitle" style="display:none">Deine erledigten Quests</div>
+      <div id="localHistoryList"></div>
     </div>
-
   </div>
 </div>
 
