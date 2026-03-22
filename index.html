@@ -1,19 +1,6 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
-<script>
-  window.OneSignalDeferred = window.OneSignalDeferred || [];
-  OneSignalDeferred.push(async function(OneSignal) {
-    await OneSignal.init({
-      appId: "6c304af6-8845-4c8d-bea3-952ce0560cc4",
-      notifyButton: { enable: false },
-      promptOptions: {
-        slidedown: { prompts: [{ type: "push", autoPrompt: false }] }
-      }
-    });
-  });
-</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>SideQuest</title>
@@ -131,7 +118,7 @@ function showTab(id) {
   el('tab-' + id).style.display = 'block';
   el('tabBtn-' + id).classList.add('active');
   if (id === 'quests') { try { loadWeekQuest(); } catch(e){} try { renderSeasonalQuests(); } catch(e){} }
-  if (id === 'feed') loadFeed();
+  if (id === 'feed') { loadFeed(); clearFeedBadge(); }
   if (id === 'leaderboard') loadLeaderboard();
   if (id === 'fitness') loadFitnessTab();
 }
@@ -622,10 +609,11 @@ function initMain() {
   checkDuellNotifications();
   renderSeasonalQuests();
   setTimeout(() => { try { cleanupOldFeedEntries(); } catch(e) {} }, 2000);
-  initPushNotifications();
+  // Check feed badge on startup and every 5 minutes
+  setTimeout(checkFeedBadge, 3000);
+  setInterval(checkFeedBadge, 5 * 60 * 1000);
   scheduleMidnightCleanup();
   scheduleMidnightQuestClear();
-  scheduleMorningNotification();
   // Show day mode prompt if quests not yet loaded today
   setTimeout(() => showDayModeIfNeeded(), 1000);
   fetchWeather && fetchWeather().then && null;
@@ -1824,12 +1812,9 @@ window.sendReaction = async function() {
   closeReactionModal();
   showToast('Reaktion gesendet! 📸');
   btn.disabled=false; btn.textContent='📸 Senden';
-  // Push notification to quest owner
-  sendPushToUser(
-    pendingReactionTargetUserId,
-    '📸 ' + (currentUser.displayName||'Jemand') + ' hat reagiert!',
-    'Jemand hat auf deine Quest reagiert — schau in den Feed!'
-  );
+  // Update badge for target user (they'll see it next time)
+  setTimeout(checkFeedBadge, 1000);
+
 };
 
 window.openCommentModal = function(completionId) {
@@ -2393,7 +2378,51 @@ window.toggleWeekQuestDesc = function() {
 
 window.completeWeekQuest = window.checkInWeekQuestToday;
 
-// ── INVITE MODAL ──
+// ── FEED BADGE ──
+async function checkFeedBadge() {
+  if (!currentUser || !groupId) return;
+  try {
+    // Count unseen reactions on my completions today
+    const myQ = query(collection(db,'completions'),
+      where('userId','==',currentUser.uid),
+      where('groupId','==',groupId),
+      where('date','==',todayKey()));
+    const mySnap = await getDocs(myQ);
+    let reactionCount = 0;
+    for (const d of mySnap.docs) {
+      const rSnap = await getDocs(collection(db,'completions',d.id,'reactions'));
+      reactionCount += rSnap.docs.filter(r =>
+        !r.data().seenBy?.includes(currentUser.uid) &&
+        r.data().userId !== currentUser.uid
+      ).length;
+    }
+    // Count new completions from friends since last visit
+    const lastVisit = localStorage.getItem('sq_feed_last_visit') || '0';
+    const friendQ = query(collection(db,'completions'),
+      where('groupId','==',groupId),
+      where('date','==',todayKey()));
+    const friendSnap = await getDocs(friendQ);
+    const newFriendPosts = friendSnap.docs.filter(d =>
+      d.data().userId !== currentUser.uid &&
+      (d.data().createdAt?.seconds || 0) * 1000 > parseInt(lastVisit)
+    ).length;
+
+    const total = reactionCount + newFriendPosts;
+    const badge = el('feedBadge');
+    if (badge) {
+      badge.style.display = total > 0 ? 'inline' : 'none';
+      badge.textContent = total > 9 ? '9+' : total;
+    }
+  } catch(e) {}
+}
+
+function clearFeedBadge() {
+  const badge = el('feedBadge');
+  if (badge) { badge.style.display = 'none'; badge.textContent = ''; }
+  localStorage.setItem('sq_feed_last_visit', Date.now().toString());
+}
+
+
 let inviteQuestTitle = '';
 let inviteTimeMode = 'spontan';
 let inviteAllGroup = true;
@@ -2488,19 +2517,6 @@ window.sendInvite = async function() {
   closeInviteModal();
   window.open(waUrl, '_blank');
   showToast('📲 WhatsApp wird geöffnet!');
-
-  // Also send push to group members via OneSignal
-  const locationText = location ? ` · 📍 ${location}` : '';
-  const pushBody = `${currentUser.displayName||'Jemand'} fragt: "${inviteQuestTitle}" — ${timeText}${locationText}. Kommst du mit?`;
-  try {
-    const gDoc = await getDoc(doc(db,'groups',groupId));
-    const members = (gDoc.data().members||[]).filter(uid => uid !== currentUser.uid);
-    // Send to selected members or whole group
-    const targets = inviteAllGroup ? members : [...inviteSelectedMembers];
-    for (const uid of targets) {
-      sendPushToUser(uid, '👋 Wer kommt mit?', pushBody);
-    }
-  } catch(e) {}
 };
 
 
@@ -3662,25 +3678,7 @@ window.shareInviteLink = function() {
 // ── SAISONALE EVENTS ──
 
 
-window.debugOneSignal = async function() {
-  try {
-    const lines = [];
-    lines.push('SDK: ' + (window.OneSignal ? 'JA' : 'NEIN'));
-    if (window.OneSignal) {
-      lines.push('Perm: ' + window.OneSignal.Notifications.permission);
-      lines.push('OptedIn: ' + window.OneSignal.User.PushSubscription.optedIn);
-      lines.push('ID: ' + (window.OneSignal.User.PushSubscription.id || 'null'));
-      // Check service workers
-      const regs = await navigator.serviceWorker.getRegistrations();
-      lines.push('SW count: ' + regs.length);
-      regs.forEach((r,i) => lines.push('SW' + i + ': ' + r.scope));
-    }
-    showToast(lines.join(' | '), 8000);
-    alert(lines.join('\n'));
-  } catch(e) {
-    alert('Fehler: ' + e.message);
-  }
-};
+
 
 window.confirmResetPoints = function() {
   el('settingsModal').style.display = 'none';
@@ -4048,7 +4046,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 
     <div class="tab-bar">
       <button class="tab-btn active" id="tabBtn-quests" onclick="showTab('quests')">⚡ Quests</button>
-      <button class="tab-btn" id="tabBtn-feed" onclick="showTab('feed')">👥 Feed</button>
+      <button class="tab-btn" id="tabBtn-feed" onclick="showTab('feed')">👥 Feed<span id="feedBadge" style="display:none;background:var(--hard);color:#fff;font-size:0.55rem;font-weight:700;padding:1px 5px;border-radius:100px;margin-left:3px;vertical-align:middle"></span></button>
       <button class="tab-btn" id="tabBtn-leaderboard" onclick="showTab('leaderboard')">🏆 Liga</button>
       <button class="tab-btn" id="tabBtn-fitness" onclick="showTab('fitness')">🏃 Fitness</button>
     </div>
@@ -4365,7 +4363,6 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <button class="btn-cancel" style="margin-bottom:8px;color:var(--medium);border-color:var(--medium)" onclick="confirmResetPoints()">🔄 Meine Punkte zurücksetzen</button>
     <button class="btn-cancel" style="margin-bottom:20px;color:var(--hard);border-color:var(--hard)" onclick="confirmDeleteGroup()">🗑️ Gruppe löschen</button>
 
-    <button class="btn-cancel" style="margin-bottom:8px;color:#f59e0b;border-color:#f59e0b" onclick="debugOneSignal()">🔔 Push Notification Test</button>
   </div>
 </div>
 
@@ -4777,171 +4774,6 @@ window.addEventListener('appinstalled', () => {
 });
 
 // ── LOKALE BENACHRICHTIGUNGEN (geplant, kein Server nötig) ──
-// ── ONESIGNAL PUSH NOTIFICATIONS ──
-const SQ_ICON = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDI0IDEwMjQiPgogIDxyZWN0IHdpZHRoPSIxMDI0IiBoZWlnaHQ9IjEwMjQiIHJ4PSIyMzAiIGZpbGw9IiMwZDBkMGYiLz4KICA8Y2lyY2xlIGN4PSI1MTIiIGN5PSI1MTIiIHI9IjM4MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYzhmMTM1IiBzdHJva2Utd2lkdGg9IjE4IiBvcGFjaXR5PSIwLjE1Ii8+CiAgPGNpcmNsZSBjeD0iNTEyIiBjeT0iNTEyIiByPSIzMDAiIGZpbGw9IiMxNDE0MTYiLz4KICA8cG9seWdvbiBwb2ludHM9IjU3MCwxODAgMzgwLDU0MCA1MTAsNTQwIDQ1MCw4NDAgNjYwLDQ2MCA1MjAsNDYwIiBmaWxsPSIjYzhmMTM1Ii8+Cjwvc3ZnPg==';
-
-async function initPushNotifications() {
-  try {
-    // Wait for OneSignal to be ready via the deferred queue
-    await new Promise(resolve => {
-      if (window.OneSignal && window.OneSignal.User) return resolve();
-      window.OneSignalDeferred = window.OneSignalDeferred || [];
-      window.OneSignalDeferred.push(() => resolve());
-      // Fallback timeout
-      setTimeout(resolve, 5000);
-    });
-
-    if (!window.OneSignal) return;
-
-    // Ask for permission
-    const permission = window.OneSignal.Notifications.permission;
-    if (!permission) {
-      await window.OneSignal.Slidedown.promptPush();
-    }
-
-    // Wait a moment for subscription to be ready
-    await new Promise(r => setTimeout(r, 2000));
-
-    // Get player ID with retry
-    let playerId = null;
-    for (let i = 0; i < 10 && !playerId; i++) {
-      playerId = window.OneSignal.User.PushSubscription.id;
-      if (!playerId) await new Promise(r => setTimeout(r, 1000));
-    }
-
-    if (playerId && currentUser) {
-      await updateDoc(doc(db,'users',currentUser.uid), { osPlayerId: playerId }).catch(()=>{});
-      console.log('OneSignal player ID saved:', playerId);
-    } else {
-      // Retry after subscription changes
-      window.OneSignal.User.PushSubscription.addEventListener('change', async (e) => {
-        const id = e.current?.id;
-        if (id && currentUser) {
-          await updateDoc(doc(db,'users',currentUser.uid), { osPlayerId: id }).catch(()=>{});
-          console.log('OneSignal player ID saved (delayed):', id);
-        }
-      });
-    }
-  } catch(e) {
-    console.log('OneSignal init error:', e);
-  }
-  scheduleMorningNotification();
-  checkAndNotify();
-  setInterval(checkAndNotify, 30 * 60 * 1000);
-}
-
-function scheduleMorningNotification() {
-  const now = new Date();
-  const morning = new Date();
-  morning.setHours(7, 30, 0, 0);
-  if (morning <= now) morning.setDate(morning.getDate() + 1);
-  setTimeout(() => {
-    if (window.OneSignal) {
-      // Tag user for morning notification (sent from OneSignal dashboard or API)
-    }
-    // Also show local notification if app is open
-    if (Notification.permission === 'granted') {
-      new Notification('☀️ Guten Morgen!', {
-        body: 'Wähle deine Quests für heute — Arbeitstag oder freier Tag?',
-        icon: SQ_ICON, tag: 'sq-morning', vibrate: [200,100,200]
-      });
-    }
-    scheduleMorningNotification();
-  }, morning - now);
-}
-
-// Send push via OneSignal REST API to a specific player
-async function sendPushToUser(targetUid, title, body) {
-  try {
-    const uDoc = await getDoc(doc(db,'users',targetUid));
-    if (!uDoc.exists() || !uDoc.data().osPlayerId) return;
-    const playerId = uDoc.data().osPlayerId;
-    await fetch('https://onesignal.com/api/v1/notifications', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'os_v2_app_nqyev5uiivgi3pvdsuwoavqmyr4depk7ebvepvnc7hst2ulxjzddkz3c2vqipegvb3nmito3xv7a2t5r3e4aeqxd5cki7vonxo3rzby'
-      },
-      body: JSON.stringify({
-        app_id: '6c304af6-8845-4c8d-bea3-952ce0560cc4',
-        include_subscription_ids: [playerId],
-        headings: { en: title },
-        contents: { en: body },
-        web_url: 'https://lion391.github.io/sidequests/',
-        web_push_topic: 'sidequests'
-      })
-    });
-  } catch(e) {}
-}
-
-async function checkAndNotify() {
-  if (!currentUser || !groupId) return;
-  try {
-    const stateKey = 'sq_notif_state';
-    const prev = JSON.parse(localStorage.getItem(stateKey) || '{}');
-    const now = { ...prev };
-
-    // Quest milestones (local)
-    const done = dailyDoneCount();
-    now.done = done;
-    const milestones = [3, 5, 7, 10];
-    if (done > 0 && done !== prev.notifiedDone && milestones.includes(done)) {
-      if (Notification.permission === 'granted') {
-        new Notification('⚡ Quest-Meilenstein!', {
-          body: `${done} Quests heute erledigt! Noch ${10 - done} Slots frei.`,
-          icon: SQ_ICON, tag: 'sq-quests'
-        });
-      }
-      now.notifiedDone = done;
-    }
-
-    // Rangliste check
-    const allCompQ = query(collection(db,'completions'),
-      where('groupId','==',groupId), where('date','==',todayKey()));
-    const allSnap = await getDocs(allCompQ);
-    const ptsByUser = {};
-    allSnap.docs.forEach(d => {
-      const uid = d.data().userId;
-      ptsByUser[uid] = (ptsByUser[uid]||0) + (d.data().pts||0);
-    });
-    const myPts = ptsByUser[currentUser.uid] || 0;
-    const myRank = Object.values(ptsByUser).filter(p => p > myPts).length + 1;
-    now.rank = myRank;
-    if (prev.rank && myRank > prev.rank) {
-      sendPushToUser(currentUser.uid, '🏆 Überholt!',
-        `Du bist auf Platz ${myRank} zurückgefallen. Hol auf!`);
-      if (Notification.permission === 'granted') {
-        new Notification('🏆 Überholt!', {
-          body: `Du bist auf Platz ${myRank} zurückgefallen. Hol auf!`,
-          icon: SQ_ICON, tag: 'sq-rank'
-        });
-      }
-    }
-
-    // Reaktionen
-    const myQ = query(collection(db,'completions'),
-      where('userId','==',currentUser.uid),
-      where('groupId','==',groupId),
-      where('date','==',todayKey()));
-    const mySnap = await getDocs(myQ);
-    let reactionCount = 0;
-    for (const d of mySnap.docs) {
-      const rSnap = await getDocs(collection(db,'completions',d.id,'reactions'));
-      reactionCount += rSnap.docs.filter(r =>
-        !r.data().seenBy?.includes(currentUser.uid) && r.data().userId !== currentUser.uid
-      ).length;
-    }
-    now.reactions = reactionCount;
-    if (reactionCount > 0 && reactionCount !== prev.notifiedReactions) {
-      // Send real push via OneSignal
-      sendPushToUser(currentUser.uid, '📸 Neue Reaktion!',
-        `Du hast ${reactionCount} neue Reaktion${reactionCount>1?'en':''} auf deine Quests!`);
-      now.notifiedReactions = reactionCount;
-    }
-
-    localStorage.setItem(stateKey, JSON.stringify(now));
-  } catch(e) {}
-}
 </script>
 
 <!-- PHOTO LIGHTBOX -->
