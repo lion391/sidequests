@@ -548,11 +548,17 @@ window.completeSeasonalQuest = function(index, eventName) {
   updateMainUI();
   localStorage.setItem('sq_seasonal_'+eventName+'_'+index, todayKey());
   renderSeasonalQuests();
-  addDoc(collection(db,'completions'), {
-    userId: currentUser.uid, userName: currentUser.displayName||'Anonym',
-    groupId, questTitle: q.t, questEmoji: q.e, questDiff: q.diff,
-    pts, notes: null, photoUrl: null, date: todayKey(), createdAt: serverTimestamp()
-  }).catch(()=>{});
+  // Save to all groups
+  (async () => {
+    try {
+      const gSnap = await getDocs(query(collection(db,'groups'), where('members','array-contains',currentUser.uid)));
+      await Promise.all(gSnap.docs.map(gDoc => addDoc(collection(db,'completions'), {
+        userId: currentUser.uid, userName: currentUser.displayName||'Anonym',
+        groupId: gDoc.id, questTitle: q.t, questEmoji: q.e, questDiff: q.diff,
+        pts, notes: null, photoUrl: null, date: todayKey(), createdAt: serverTimestamp()
+      })));
+    } catch(e) {}
+  })();
   updateDoc(doc(db,'users',currentUser.uid), { score: increment(pts) }).catch(()=>{});
   showToast(event.emoji+' +'+pts+' Punkte!', 2000);
 };
@@ -1496,21 +1502,28 @@ window.confirmComplete = async function() {
     if (activeQuestIndex === pendingIndex) activeQuestIndex = -1;
     saveLocalProgress();
 
-    // Save to Firestore — non-blocking, won't stop the flow if it fails
+    // Save to Firestore — in ALL groups the user is member of
     Promise.all([
-      addDoc(collection(db,'completions'),{
-        userId: currentUser.uid,
-        userName: currentUser.displayName||'Anonym',
-        groupId,
-        questTitle: q.t,
-        questEmoji: q.e,
-        questDiff: q.diff,
-        pts,
-        notes: notes||null,
-        photoUrl: photoUrl||null,
-        date: todayKey(),
-        createdAt: serverTimestamp()
-      }),
+      (async () => {
+        try {
+          // Get all groups user is member of
+          const gSnap = await getDocs(query(collection(db,'groups'), where('members','array-contains',currentUser.uid)));
+          const savePromises = gSnap.docs.map(gDoc => addDoc(collection(db,'completions'), {
+            userId: currentUser.uid,
+            userName: currentUser.displayName||'Anonym',
+            groupId: gDoc.id,
+            questTitle: q.t,
+            questEmoji: q.e,
+            questDiff: q.diff,
+            pts,
+            notes: notes||null,
+            photoUrl: photoUrl||null,
+            date: todayKey(),
+            createdAt: serverTimestamp()
+          }));
+          await Promise.all(savePromises);
+        } catch(e) { console.log('Firestore save error:', e); }
+      })(),
       updateDoc(doc(db,'users',currentUser.uid),{ score: increment(pts) })
     ]).catch(e => console.log('Firestore save error:', e));
 
@@ -2350,13 +2363,14 @@ window.submitWeekQuestFinal = async function() {
 
   try {
     await updateDoc(doc(db,'users',currentUser.uid), { score: increment(earnedPts) });
-    await addDoc(collection(db,'completions'), {
+    const gSnap = await getDocs(query(collection(db,'groups'), where('members','array-contains',currentUser.uid)));
+    await Promise.all(gSnap.docs.map(gDoc => addDoc(collection(db,'completions'), {
       userId: currentUser.uid, userName: currentUser.displayName||'Anonym',
-      groupId, questTitle: '🌟 ' + wq.t, questEmoji: wq.e,
+      groupId: gDoc.id, questTitle: '🌟 ' + wq.t, questEmoji: wq.e,
       questDiff: 'wild', pts: earnedPts,
       notes: `Wochenquest abgeschlossen! ${checkedDays}/7 Tage 🎉`,
       photoUrl, date: todayKey(), createdAt: serverTimestamp()
-    });
+    })));
   } catch(e) {}
 
   btn.disabled = false; btn.textContent = '🎉 Abschliessen';
