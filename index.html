@@ -2224,6 +2224,10 @@ async function loadWeekQuest() {
   const checkedDays = getWeekCheckedDays();
   const totalDays = 7;
   const isLastDay = daysLeft === 0; // Sunday
+  const potentialPts = Math.round(wq.pts / 7 * Math.max(checkedDays, 1));
+  el('weekQuestPts').textContent = checkedDays > 0
+    ? `+${Math.round(wq.pts / 7 * checkedDays)} Pts (${checkedDays}/7 Tage)`
+    : `bis +${wq.pts} Pts`;
 
   if (fullyDone) {
     el('weekQuestDaysLeft').textContent = '✅ Woche abgeschlossen!';
@@ -2281,7 +2285,7 @@ function renderWeekProgress(checked, total, done) {
     let color = 'var(--muted)';
     if (isChecked) { bg = 'var(--accent)'; color = 'var(--bg)'; }
     else if (isToday) { bg = '#c084fc33'; color = 'var(--wild)'; }
-    return `<div style="flex:1;text-align:center;padding:4px 2px;background:${bg};border-radius:6px;font-size:0.65rem;font-weight:700;color:${color}">${isChecked ? '✓' : d}</div>`;
+    return `<div style="flex:1;text-align:center;padding:6px 2px;background:${bg};border-radius:8px;font-size:0.68rem;font-weight:700;color:${color}">${isChecked ? '✓' : d}</div>`;
   }).join('');
 }
 
@@ -2324,22 +2328,26 @@ window.submitWeekQuestFinal = async function() {
   // Mark today as checked too
   localStorage.setItem(weekQuestDailyKey(), '1');
 
+  // Calculate pts: full pts / 7 * checked days
+  const checkedDays = getWeekCheckedDays();
+  const earnedPts = Math.round(wq.pts / 7 * checkedDays);
+
   let photoUrl = null;
   if (weekQuestPhotoData) {
     try { photoUrl = await uploadToCloudinary(weekQuestPhotoData, 'weekquests'); } catch(e) {}
   }
 
   localStorage.setItem(weekQuestKey(), 'done');
-  score += wq.pts;
+  score += earnedPts;
   saveLocalProgress();
 
   try {
-    await updateDoc(doc(db,'users',currentUser.uid), { score: increment(wq.pts) });
+    await updateDoc(doc(db,'users',currentUser.uid), { score: increment(earnedPts) });
     await addDoc(collection(db,'completions'), {
       userId: currentUser.uid, userName: currentUser.displayName||'Anonym',
       groupId, questTitle: '🌟 ' + wq.t, questEmoji: wq.e,
-      questDiff: 'wild', pts: wq.pts,
-      notes: 'Wochenquest abgeschlossen! 🎉',
+      questDiff: 'wild', pts: earnedPts,
+      notes: `Wochenquest abgeschlossen! ${checkedDays}/7 Tage 🎉`,
       photoUrl, date: todayKey(), createdAt: serverTimestamp()
     });
   } catch(e) {}
@@ -2348,7 +2356,7 @@ window.submitWeekQuestFinal = async function() {
   closeWeekQuestPhotoModal();
   updateMainUI();
   loadWeekQuest();
-  showToast(`🌟 Wochenquest abgeschlossen! +${wq.pts} Punkte!`, 3000);
+  showToast(`🌟 Wochenquest! +${earnedPts} Punkte (${checkedDays}/7 Tage)`, 3000);
 };
 
 window.toggleWeekQuestDesc = function() {
@@ -3956,7 +3964,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
           <span id="weekQuestChevron" style="font-size:0.8rem;color:var(--muted);flex-shrink:0;margin-left:10px">▼</span>
         </button>
         <!-- Progress dots -->
-        <div id="weekQuestProgress" style="display:flex;gap:4px;padding:8px 16px 0;"></div>
+        <div id="weekQuestProgress" style="display:flex;gap:6px;padding:10px 16px 12px;"></div>
         <div id="weekQuestDetails" style="display:none;padding:0 16px 14px;border-top:1px solid var(--border);margin-top:8px">
           <div style="font-size:0.75rem;color:var(--muted);line-height:1.5;margin:10px 0 12px" id="weekQuestDesc"></div>
           <div style="display:flex;align-items:center;justify-content:space-between">
