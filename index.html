@@ -1059,25 +1059,19 @@ async function cleanupOldFeedEntries() {
   if (!groupId || !currentUser) return;
   try {
     const today = todayKey();
-    // Delete own old entries
-    const q = query(collection(db,'completions'),
-      where('userId','==',currentUser.uid),
-      where('groupId','==',groupId));
+    // Get ALL completions for this group and delete non-today ones
+    const q = query(collection(db,'completions'), where('groupId','==',groupId));
     const snap = await getDocs(q);
-    const toDelete = snap.docs.filter(d => (d.data().date || '') !== today);
-    if (toDelete.length > 0) {
-      await Promise.all(toDelete.map(d => deleteDoc(doc(db,'completions',d.id))));
+    const toDelete = snap.docs.filter(d => {
+      const date = d.data().date || '';
+      return date !== today;
+    });
+    if (toDelete.length === 0) return;
+    // Delete one by one, ignore permission errors on others' docs
+    for (const d of toDelete) {
+      try { await deleteDoc(doc(db,'completions',d.id)); } catch(e) {}
     }
-    // Also delete OTHER members' old entries (needs updated Firestore rule)
-    const allQ = query(collection(db,'completions'), where('groupId','==',groupId));
-    const allSnap = await getDocs(allQ);
-    const othersToDelete = allSnap.docs.filter(d => (d.data().date || '') !== today);
-    if (othersToDelete.length > 0) {
-      await Promise.all(othersToDelete.map(d =>
-        deleteDoc(doc(db,'completions',d.id)).catch(()=>{}) // silent if no permission
-      ));
-    }
-  } catch(e) { /* silent */ }
+  } catch(e) {}
 }
 
 // Schedule cleanup exactly at midnight
