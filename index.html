@@ -734,7 +734,7 @@ function updateMainUI() {
   const lvl = getLevel(score);
   el('mainLevelIcon').textContent = lvl.icon;
   el('mainLevelName').textContent = lvl.name;
-  el('mainScore').textContent = score;
+  if (el('mainScore')) el('mainScore').textContent = score;
   const lvlSub = el('mainLevelSub');
   if(lvlSub) lvlSub.textContent = lvl.next === Infinity ? 'Maximales Level! 🎉' : `Noch ${lvl.next - score} Pts bis zum nächsten Level`;
   const daily = dailyUsedCount();
