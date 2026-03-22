@@ -302,6 +302,8 @@ async function autoJoinByCode(code) {
     showGroupScreen();
   }
 }
+
+async function loadGroup() {
   const gDoc = await getDoc(doc(db, 'groups', groupId));
   if (!gDoc.exists()) {
     localStorage.removeItem('sq_groupId');
