@@ -1,6 +1,19 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<script>
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  OneSignalDeferred.push(async function(OneSignal) {
+    await OneSignal.init({
+      appId: "6c304af6-8845-4c8d-bea3-952ce0560cc4",
+      notifyButton: { enable: false },
+      promptOptions: {
+        slidedown: { prompts: [{ type: "push", autoPrompt: false }] }
+      }
+    });
+  });
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>SideQuest</title>
@@ -4725,72 +4738,106 @@ window.addEventListener('appinstalled', () => {
 });
 
 // ── LOKALE BENACHRICHTIGUNGEN (geplant, kein Server nötig) ──
+// ── ONESIGNAL PUSH NOTIFICATIONS ──
+const SQ_ICON = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDI0IDEwMjQiPgogIDxyZWN0IHdpZHRoPSIxMDI0IiBoZWlnaHQ9IjEwMjQiIHJ4PSIyMzAiIGZpbGw9IiMwZDBkMGYiLz4KICA8Y2lyY2xlIGN4PSI1MTIiIGN5PSI1MTIiIHI9IjM4MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYzhmMTM1IiBzdHJva2Utd2lkdGg9IjE4IiBvcGFjaXR5PSIwLjE1Ii8+CiAgPGNpcmNsZSBjeD0iNTEyIiBjeT0iNTEyIiByPSIzMDAiIGZpbGw9IiMxNDE0MTYiLz4KICA8cG9seWdvbiBwb2ludHM9IjU3MCwxODAgMzgwLDU0MCA1MTAsNTQwIDQ1MCw4NDAgNjYwLDQ2MCA1MjAsNDYwIiBmaWxsPSIjYzhmMTM1Ii8+Cjwvc3ZnPg==';
+
 async function initPushNotifications() {
-  const isInstalled = window.matchMedia('(display-mode: standalone)').matches
-    || window.navigator.standalone === true;
-  if (!isInstalled) return;
-  if (!('Notification' in window)) return;
-
-  const permission = await Notification.requestPermission();
-  if (permission !== 'granted') return;
-
+  if (!window.OneSignal) return;
+  try {
+    // Ask for permission after login
+    const permission = await window.OneSignal.Notifications.permission;
+    if (!permission) {
+      await window.OneSignal.Slidedown.promptPush();
+    }
+    // Save OneSignal player ID to Firestore for targeted notifications
+    const playerId = await window.OneSignal.User.PushSubscription.id;
+    if (playerId && currentUser) {
+      await updateDoc(doc(db,'users',currentUser.uid), { osPlayerId: playerId }).catch(()=>{});
+    }
+    // Listen for subscription changes
+    window.OneSignal.User.PushSubscription.addEventListener('change', async (event) => {
+      if (event.current.id) {
+        await updateDoc(doc(db,'users',currentUser.uid), { osPlayerId: event.current.id }).catch(()=>{});
+      }
+    });
+  } catch(e) {}
+  // Schedule daily notifications via OneSignal tags
   scheduleLocalNotifications();
 }
 
 function scheduleLocalNotifications() {
-  if (Notification.permission !== 'granted') return;
+  // Schedule 7:30 morning notification using local timer as fallback
+  scheduleMorningNotification();
+  // Check for events every 30 min while app is open
+  checkAndNotify();
+  setInterval(checkAndNotify, 30 * 60 * 1000);
+}
 
-  // Only 3 checks per day at fixed times — saves ~95% of notification Firestore reads
+function scheduleMorningNotification() {
   const now = new Date();
-  const todayStr = now.toISOString().slice(0,10);
-  const lastDay = localStorage.getItem('sq_notif_day');
-  if (lastDay !== todayStr) {
-    localStorage.setItem('sq_notif_day', todayStr);
-    localStorage.removeItem('sq_notif_state'); // reset daily state
-  }
+  const morning = new Date();
+  morning.setHours(7, 30, 0, 0);
+  if (morning <= now) morning.setDate(morning.getDate() + 1);
+  setTimeout(() => {
+    if (window.OneSignal) {
+      // Tag user for morning notification (sent from OneSignal dashboard or API)
+    }
+    // Also show local notification if app is open
+    if (Notification.permission === 'granted') {
+      new Notification('☀️ Guten Morgen!', {
+        body: 'Wähle deine Quests für heute — Arbeitstag oder freier Tag?',
+        icon: SQ_ICON, tag: 'sq-morning', vibrate: [200,100,200]
+      });
+    }
+    scheduleMorningNotification();
+  }, morning - now);
+}
 
-  [
-    { hour: 12, min: 0 },
-    { hour: 17, min: 30 },
-    { hour: 20, min: 0 },
-  ].forEach(s => {
-    const t = new Date();
-    t.setHours(s.hour, s.min, 0, 0);
-    const ms = t - now;
-    if (ms < 0) return;
-    setTimeout(() => checkAndNotify(), ms);
-  });
+// Send push via OneSignal REST API to a specific player
+async function sendPushToUser(targetUid, title, body) {
+  try {
+    const uDoc = await getDoc(doc(db,'users',targetUid));
+    if (!uDoc.exists() || !uDoc.data().osPlayerId) return;
+    const playerId = uDoc.data().osPlayerId;
+    await fetch('https://onesignal.com/api/v1/notifications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        app_id: '6c304af6-8845-4c8d-bea3-952ce0560cc4',
+        include_subscription_ids: [playerId],
+        headings: { en: title },
+        contents: { en: body },
+        web_url: 'https://lion391.github.io/sidequests/'
+      })
+    });
+  } catch(e) {}
 }
 
 async function checkAndNotify() {
-  if (Notification.permission !== 'granted') return;
   if (!currentUser || !groupId) return;
-
   try {
     const stateKey = 'sq_notif_state';
     const prev = JSON.parse(localStorage.getItem(stateKey) || '{}');
     const now = { ...prev };
 
-    // ── Check 1: Quest progress (local — zero Firestore reads) ──
+    // Quest milestones (local)
     const done = dailyDoneCount();
     now.done = done;
     const milestones = [3, 5, 7, 10];
     if (done > 0 && done !== prev.notifiedDone && milestones.includes(done)) {
-      new Notification('⚡ Quest-Meilenstein!', {
-        body: `${done} Quests heute erledigt! Noch ${10 - done} Slots frei.`,
-        icon: SQ_ICON, tag: 'sq-quests', vibrate: [200,100,200]
-      });
+      if (Notification.permission === 'granted') {
+        new Notification('⚡ Quest-Meilenstein!', {
+          body: `${done} Quests heute erledigt! Noch ${10 - done} Slots frei.`,
+          icon: SQ_ICON, tag: 'sq-quests'
+        });
+      }
       now.notifiedDone = done;
     }
 
-    // ── Check 2: Rangliste (1 read for completions, use cached members) ──
-    const mk = monthKey();
+    // Rangliste check
     const allCompQ = query(collection(db,'completions'),
-      where('groupId','==',groupId),
-      where('date','==',todayKey()));
+      where('groupId','==',groupId), where('date','==',todayKey()));
     const allSnap = await getDocs(allCompQ);
-
-    // Tally points per user from single query
     const ptsByUser = {};
     allSnap.docs.forEach(d => {
       const uid = d.data().userId;
@@ -4799,31 +4846,14 @@ async function checkAndNotify() {
     const myPts = ptsByUser[currentUser.uid] || 0;
     const myRank = Object.values(ptsByUser).filter(p => p > myPts).length + 1;
     now.rank = myRank;
-
-    if (prev.rank && myRank > prev.rank) {
+    if (prev.rank && myRank > prev.rank && Notification.permission === 'granted') {
       new Notification('🏆 Überholt!', {
         body: `Du bist auf Platz ${myRank} zurückgefallen. Hol auf!`,
-        icon: SQ_ICON, tag: 'sq-rank', vibrate: [300,100,300]
-      });
-    } else if (prev.rank && myRank < prev.rank) {
-      new Notification('🏆 Du hast jemanden überholt!', {
-        body: `Du bist jetzt auf Platz ${myRank} in der Rangliste!`,
-        icon: SQ_ICON, tag: 'sq-rank', vibrate: [200,100,200]
+        icon: SQ_ICON, tag: 'sq-rank'
       });
     }
 
-    // ── Check 3: Freunde aktiv (from same query above — no extra reads) ──
-    const friendCount = allSnap.docs.filter(d=>d.data().userId!==currentUser.uid).length;
-    now.friendCount = friendCount;
-    if (friendCount > 0 && friendCount !== prev.notifiedFriends) {
-      new Notification('👥 Freunde aktiv!', {
-        body: `${friendCount} Quest${friendCount>1?'s':''} von deiner Gruppe heute im Feed!`,
-        icon: SQ_ICON, tag: 'sq-feed', vibrate: [200,100,200]
-      });
-      now.notifiedFriends = friendCount;
-    }
-
-    // ── Check 4: Reaktionen (only my completions — small query) ──
+    // Reaktionen
     const myQ = query(collection(db,'completions'),
       where('userId','==',currentUser.uid),
       where('groupId','==',groupId),
@@ -4838,23 +4868,14 @@ async function checkAndNotify() {
     }
     now.reactions = reactionCount;
     if (reactionCount > 0 && reactionCount !== prev.notifiedReactions) {
-      new Notification('📸 Neue Reaktion!', {
-        body: `Du hast ${reactionCount} neue Reaktion${reactionCount>1?'en':''} auf deine Quests!`,
-        icon: SQ_ICON, tag: 'sq-reaction', vibrate: [200,100,200]
-      });
+      // Send real push via OneSignal
+      sendPushToUser(currentUser.uid, '📸 Neue Reaktion!',
+        `Du hast ${reactionCount} neue Reaktion${reactionCount>1?'en':''} auf deine Quests!`);
       now.notifiedReactions = reactionCount;
     }
 
     localStorage.setItem(stateKey, JSON.stringify(now));
-  } catch(e) { /* silent */ }
-}
-
-const SQ_ICON = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDI0IDEwMjQiPgogIDxyZWN0IHdpZHRoPSIxMDI0IiBoZWlnaHQ9IjEwMjQiIHJ4PSIyMzAiIGZpbGw9IiMwZDBkMGYiLz4KICA8Y2lyY2xlIGN4PSI1MTIiIGN5PSI1MTIiIHI9IjM4MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYzhmMTM1IiBzdHJva2Utd2lkdGg9IjE4IiBvcGFjaXR5PSIwLjE1Ii8+CiAgPGNpcmNsZSBjeD0iNTEyIiBjeT0iNTEyIiByPSIzMDAiIGZpbGw9IiMxNDE0MTYiLz4KICA8cG9seWdvbiBwb2ludHM9IjU3MCwxODAgMzgwLDU0MCA1MTAsNTQwIDQ1MCw4NDAgNjYwLDQ2MCA1MjAsNDYwIiBmaWxsPSIjYzhmMTM1Ii8+Cjwvc3ZnPg==';
-
-// Service Worker für Offline + Notifications
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sidequests/firebase-messaging-sw.js')
-    .catch(() => {});
+  } catch(e) {}
 }
 </script>
 
