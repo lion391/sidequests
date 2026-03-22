@@ -1730,7 +1730,7 @@ async function loadFeed() {
           </div>
           <span class="pts-inline pts-${c.questDiff}">+${c.pts}</span>
         </div>
-        ${c.photoUrl?`<img class="feed-photo" src="${c.photoUrl}" alt="Beweis" onclick="openPhotoLightbox('${c.photoUrl}')" style="cursor:zoom-in">` : ''}
+        ${c.photoUrl?`<div style="width:100%;aspect-ratio:4/3;overflow:hidden;background:var(--surface2)"><img class="feed-photo" src="${c.photoUrl}" alt="Beweis" onclick="openPhotoLightbox('${c.photoUrl}')" style="width:100%;height:100%;object-fit:contain;cursor:zoom-in;background:#000"></div>` : ''}
         ${c.notes?`<div class="feed-note">"${c.notes}"</div>`:''}
         <div class="feed-reactions" id="reactions-${d.id}"></div>
         ${isMe ? '' : `<div class="feed-react-bar">
