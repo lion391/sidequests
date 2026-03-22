@@ -317,8 +317,6 @@ async function loadGroup() {
   const hgn = el('headerGroupName');
   if (hgn) hgn.textContent = currentGroup.name;
 
-  // Reset state for new group
-  activeQuests = [];
   activeQuestIndex = -1;
 
   // Clean up old listeners
@@ -628,7 +626,6 @@ function activeQuestsKey() {
   return `sq_aq_${todayKey()}`;
 }
 function saveActiveQuests() {
-  if (!groupId) return;
   try {
     // Strip photos from active quests before saving
     const clean = activeQuests.map(q => q ? {...q, localPhoto: undefined} : null);
@@ -1495,21 +1492,26 @@ window.confirmComplete = async function() {
     if (activeQuestIndex === pendingIndex) activeQuestIndex = -1;
     saveLocalProgress();
 
-    // Save to Firestore — non-blocking, won't stop the flow if it fails
+    // Save to Firestore — in ALL groups the user is member of
     Promise.all([
-      addDoc(collection(db,'completions'),{
-        userId: currentUser.uid,
-        userName: currentUser.displayName||'Anonym',
-        groupId,
-        questTitle: q.t,
-        questEmoji: q.e,
-        questDiff: q.diff,
-        pts,
-        notes: notes||null,
-        photoUrl: photoUrl||null,
-        date: todayKey(),
-        createdAt: serverTimestamp()
-      }),
+      (async () => {
+        try {
+          const gSnap = await getDocs(query(collection(db,'groups'), where('members','array-contains',currentUser.uid)));
+          await Promise.all(gSnap.docs.map(gDoc => addDoc(collection(db,'completions'), {
+            userId: currentUser.uid,
+            userName: currentUser.displayName||'Anonym',
+            groupId: gDoc.id,
+            questTitle: q.t,
+            questEmoji: q.e,
+            questDiff: q.diff,
+            pts,
+            notes: notes||null,
+            photoUrl: photoUrl||null,
+            date: todayKey(),
+            createdAt: serverTimestamp()
+          })));
+        } catch(e) { console.log('Firestore save error:', e); }
+      })(),
       updateDoc(doc(db,'users',currentUser.uid),{ score: increment(pts) })
     ]).catch(e => console.log('Firestore save error:', e));
 
@@ -1876,8 +1878,7 @@ async function loadLeaderboard() {
     u.displaySub='0 Quests diesen Monat';
     try {
       const mq=query(collection(db,'completions'),
-        where('userId','==',uid),
-        where('groupId','==',groupId));
+        where('userId','==',uid));
       const mSnap=await getDocs(mq);
       const monthDocs=mSnap.docs.filter(d=>{
         const date=d.data().date||'';
