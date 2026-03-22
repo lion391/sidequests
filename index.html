@@ -317,11 +317,7 @@ async function loadGroup() {
   const hgn = el('headerGroupName');
   if (hgn) hgn.textContent = currentGroup.name;
 
-  // Reset state for new group
-  activeQuests = [];
-  activeQuestIndex = -1;
-
-  // Clean up old listeners
+  // Clean up old listeners first
   if (feedUnsubscribe) { feedUnsubscribe(); feedUnsubscribe = null; }
   if (leaderboardUnsubscribe) { leaderboardUnsubscribe(); leaderboardUnsubscribe = null; }
   Object.values(reactionsUnsubscribes).forEach(u => u && u());
@@ -1083,7 +1079,7 @@ function showDayModeIfNeeded() {
   const hasQuests = activeQuests.some(q => q !== null);
   const modeSet = getDayMode();
   const locked = localStorage.getItem('sq_day_mode_locked');
-  // Show modal only if no mode set yet today and not locked
+  // Only show if no quests AND no mode set yet AND not locked
   if (!hasQuests && !modeSet && !locked) {
     el('dayModeModal').style.display = 'flex';
   }
@@ -1095,6 +1091,14 @@ function showDayModeIfNeeded() {
       badge.textContent = modeSet === 'work' ? '💼 Arbeitstag' : '🎉 Freier Tag';
       badge.style.cursor = 'default';
       badge.onclick = null;
+    }
+  }
+  // If quests exist but day mode badge not shown, still update badge
+  if (hasQuests && modeSet) {
+    const badge = el('dayModeBadge');
+    if (badge) {
+      badge.style.display = 'block';
+      badge.textContent = modeSet === 'work' ? '💼 Arbeitstag' : '🎉 Freier Tag';
     }
   }
 }
