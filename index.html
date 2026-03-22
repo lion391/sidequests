@@ -2435,6 +2435,9 @@ window.markChallengeFailed = async function(id) {
 
 // ── GPS TRACKER ──
 let gpsPoints = [], gpsWatchId = null, gpsTotalDistance = 0, gpsRunning = false, gpsPaused = false;
+let gpsActivityType = 'run'; // 'run' | 'velo' | 'walk'
+const GPS_PTS_PER_KM = { run: 10, velo: 5, walk: 7 };
+const GPS_ACTIVITY_LABELS = { run: '🏃 Laufen', velo: '🚴 Velo', walk: '🚶 Wandern' };
 
 function haversineDistance(a, b) {
   const R = 6371;
@@ -2515,7 +2518,8 @@ window.gpsStart = function() {
         gpsTotalDistance += dist;
         el('gpsDistance').textContent = gpsTotalDistance.toFixed(2);
         if (gpsMode === 'fitness') {
-          el('gpsPtsPreview').textContent = `+${Math.floor(gpsTotalDistance * 10)} Pts`;
+          const ptsPerKm = GPS_PTS_PER_KM[gpsActivityType] || 10;
+          el('gpsPtsPreview').textContent = `+${Math.floor(gpsTotalDistance * ptsPerKm)} Pts`;
         }
       }
       gpsPoints.push(pt);
@@ -2532,6 +2536,16 @@ window.gpsPause = function() {
   el('gpsStatus').textContent = gpsPaused ? '⏸ Pausiert' : '📍 Tracking läuft...';
 };
 
+window.selectGpsActivity = function(type, btn) {
+  gpsActivityType = type;
+  document.querySelectorAll('.gps-act-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  // Update save button label
+  const labels = { run: '🏃 Lauf speichern', velo: '🚴 Fahrt speichern', walk: '🚶 Wanderung speichern' };
+  const saveBtn = el('gpsSaveFitnessBtn');
+  if (saveBtn) saveBtn.textContent = (labels[type] || '🏃 Speichern') + ' & Punkte kassieren';
+};
+
 // gpsMode: 'quest' | 'fitness'
 let gpsMode = 'quest';
 
@@ -2545,8 +2559,9 @@ window.gpsStop = function() {
     if (gpsMode === 'quest') {
       el('gpsUseBtn').style.display = 'block';
     } else {
-      const pts = Math.floor(gpsTotalDistance * 10);
-      el('gpsPtsPreview').textContent = `+${pts} Punkte (${gpsTotalDistance.toFixed(2)} km × 10)`;
+      const ptsPerKm = GPS_PTS_PER_KM[gpsActivityType] || 10;
+      const pts = Math.floor(gpsTotalDistance * ptsPerKm);
+      el('gpsPtsPreview').textContent = `+${pts} Pts (${gpsTotalDistance.toFixed(2)} km × ${ptsPerKm})`;
       el('gpsSaveFitnessBtn').style.display = 'block';
     }
   }
@@ -2579,7 +2594,9 @@ window.gpsUseAsProof = function() {
 
 window.gpsSaveAsFitness = async function() {
   const km = gpsTotalDistance;
-  const pts = Math.floor(km * 10);
+  const ptsPerKm = GPS_PTS_PER_KM[gpsActivityType] || 10;
+  const pts = Math.floor(km * ptsPerKm);
+  const activityLabel = GPS_ACTIVITY_LABELS[gpsActivityType] || '🏃 Laufen';
   const routeImage = buildRouteImage();
   const date = todayKey();
   const week = getWeekNumber();
@@ -2596,6 +2613,8 @@ window.gpsSaveAsFitness = async function() {
     groupId,
     km,
     pts,
+    activity: gpsActivityType,
+    activityLabel,
     photoUrl,
     date,
     week,
@@ -2635,6 +2654,7 @@ window.openFitnessTracker = function() { openFitnessTrackerInner('fitness', -1);
 
 function openFitnessTrackerInner(mode, questIdx) {
   gpsMode = mode;
+  gpsActivityType = 'run'; // default
   gpsPoints = []; gpsTotalDistance = 0; gpsRunning = false; gpsPaused = false; gpsWatchId = null;
   el('gpsDistance').textContent = '0.00';
   el('gpsPtsPreview').textContent = '';
@@ -2647,7 +2667,12 @@ function openFitnessTrackerInner(mode, questIdx) {
   el('gpsSaveFitnessBtn').style.display = 'none';
   el('gpsCanvas').getContext('2d').clearRect(0,0,400,240);
   el('gpsModal').dataset.questIdx = questIdx >= 0 ? questIdx : '';
-  el('gpsModalTitle').textContent = mode === 'fitness' ? '🏃 Lauf Tracker' : '🗺️ GPS Tracker';
+  el('gpsModalTitle').textContent = mode === 'fitness' ? '🏃 Aktivitäts-Tracker' : '🗺️ GPS Tracker';
+  // Show/hide activity selector
+  const actSel = el('gpsActivitySelector');
+  if (actSel) actSel.style.display = mode === 'fitness' ? 'flex' : 'none';
+  // Reset activity buttons
+  document.querySelectorAll('.gps-act-btn').forEach((b,i) => b.classList.toggle('active', i === 0));
   if (mode === 'quest') el('proofModal').style.display = 'none';
   el('gpsModal').style.display = 'flex';
 }
@@ -2730,7 +2755,7 @@ async function loadFitnessTab() {
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
           <div>
             <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1.1rem">${r.km.toFixed(2)} km</div>
-            <div style="font-size:0.7rem;color:var(--muted)">${r.date} · noch ${daysLeft} Tage sichtbar</div>
+            <div style="font-size:0.7rem;color:var(--muted)">${r.activityLabel||'🏃 Laufen'} · ${r.date} · noch ${daysLeft} Tage sichtbar</div>
           </div>
           <div style="font-family:'Syne',sans-serif;font-weight:800;color:var(--accent)">+${r.pts} Pts</div>
         </div>
@@ -4019,6 +4044,13 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <div class="modal-handle"></div>
     <div class="modal-title" id="gpsModalTitle">🗺️ GPS Tracker</div>
     <div class="modal-sub" id="gpsStatus">Bereit zum Starten</div>
+
+    <!-- Activity selector (only shown in fitness mode) -->
+    <div id="gpsActivitySelector" style="display:none;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="gps-act-btn active" onclick="selectGpsActivity('run',this)" style="flex:1;padding:8px;background:var(--accent)22;border:1px solid var(--accent);border-radius:10px;color:var(--accent);font-weight:700;font-size:0.8rem;cursor:pointer">🏃 Laufen<br><span style="font-size:0.65rem;font-weight:400">10 Pts/km</span></button>
+      <button class="gps-act-btn" onclick="selectGpsActivity('walk',this)" style="flex:1;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-weight:700;font-size:0.8rem;cursor:pointer">🚶 Wandern<br><span style="font-size:0.65rem;font-weight:400">7 Pts/km</span></button>
+      <button class="gps-act-btn" onclick="selectGpsActivity('velo',this)" style="flex:1;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-weight:700;font-size:0.8rem;cursor:pointer">🚴 Velo<br><span style="font-size:0.65rem;font-weight:400">5 Pts/km</span></button>
+    </div>
 
     <!-- Distance display -->
     <div style="text-align:center;margin-bottom:16px">
