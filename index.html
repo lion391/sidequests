@@ -608,6 +608,10 @@ function initMain() {
   setTimeout(() => { try { cleanupOldFeedEntries(); } catch(e) {} }, 2000);
   initPushNotifications();
   scheduleMidnightCleanup();
+  scheduleMidnightQuestClear();
+  scheduleMorningNotification();
+  // Show day mode prompt if quests not yet loaded today
+  setTimeout(() => showDayModeIfNeeded(), 1000);
   fetchWeather && fetchWeather().then && null;
   cleanupOldFeedEntries();
 }
@@ -1035,7 +1039,95 @@ const ALL_QUESTS = [
 ];
 
 
-// ── QUEST LOGIC ──
+// ── DAY MODE ──
+// work = Arbeitstag (quick quests only), free = Freier Tag (all quests)
+// Categories excluded on workdays
+const WORK_EXCLUDE_CATS = ['Abenteuer','Sport','Natur','Kochen'];
+const WORK_EXCLUDE_DIFFS = ['hard','wild'];
+
+function getDayMode() {
+  const stored = localStorage.getItem('sq_day_mode');
+  const storedDate = localStorage.getItem('sq_day_mode_date');
+  if (storedDate === todayKey() && stored) return stored;
+  return null; // not yet selected today
+}
+
+window.selectDayMode = function(mode) {
+  localStorage.setItem('sq_day_mode', mode);
+  localStorage.setItem('sq_day_mode_date', todayKey());
+  el('dayModeModal').style.display = 'none';
+  // Update badge
+  const badge = el('dayModeBadge');
+  if (badge) {
+    badge.style.display = 'block';
+    badge.textContent = mode === 'work' ? '💼 Arbeitstag aktiv — klick zum Ändern' : '🎉 Freier Tag aktiv — klick zum Ändern';
+    badge.onclick = () => { localStorage.removeItem('sq_day_mode_date'); el('dayModeModal').style.display = 'flex'; };
+    badge.style.cursor = 'pointer';
+  }
+  showToast(mode === 'work' ? '💼 Arbeitstag — passende Quests!' : '🎉 Freier Tag — alles möglich!');
+  setTimeout(() => loadAllQuests(), 300);
+};
+
+function showDayModeIfNeeded() {
+  // Only show if quests not yet loaded today
+  const hasQuests = activeQuests.some(q => q !== null);
+  const modeSet = getDayMode();
+  if (!hasQuests && !modeSet) {
+    el('dayModeModal').style.display = 'flex';
+  }
+}
+
+function filterQuestsByDayMode(quests) {
+  const mode = getDayMode();
+  if (mode !== 'work') return quests; // free day or not set = all quests
+  return quests.filter(q =>
+    !WORK_EXCLUDE_CATS.includes(q.cat) &&
+    !WORK_EXCLUDE_DIFFS.includes(q.diff)
+  );
+}
+
+// Schedule midnight clear of remaining quests
+function scheduleMidnightQuestClear() {
+  const now = new Date();
+  const midnight = new Date();
+  midnight.setHours(24, 0, 0, 0);
+  const ms = midnight - now;
+  setTimeout(async () => {
+    // Clear all active quests at midnight
+    activeQuests = [null, null, null, null, null];
+    saveActiveQuests();
+    // Reset day mode for new day
+    localStorage.removeItem('sq_day_mode_date');
+    // Refresh UI
+    el('questList').innerHTML = '<div class="quest-placeholder"><span style="font-size:2rem;display:block;margin-bottom:8px">✨</span>Drück den Knopf — 5 Abenteuer warten!</div>';
+    el('newQuestBtn').style.display = 'flex';
+    updateMainUI();
+    scheduleMidnightQuestClear(); // schedule next midnight
+  }, ms);
+}
+
+// 7:30 morning notification
+function scheduleMorningNotification() {
+  const now = new Date();
+  const morning = new Date();
+  morning.setHours(7, 30, 0, 0);
+  // If 7:30 already passed today, schedule for tomorrow
+  if (morning <= now) morning.setDate(morning.getDate() + 1);
+  const ms = morning - now;
+  setTimeout(() => {
+    if (Notification.permission === 'granted') {
+      new Notification('☀️ Guten Morgen!', {
+        body: 'Wähle deine Quests für heute — Arbeitstag oder freier Tag?',
+        icon: SQ_ICON,
+        tag: 'sq-morning',
+        vibrate: [200, 100, 200]
+      });
+    }
+    scheduleMorningNotification(); // schedule next morning
+  }, ms);
+}
+
+
 const DIFF_DE = {easy:'Leicht',medium:'Mittel',hard:'Schwer',wild:'Wild 🔥'};
 const DIFF_PTS = {easy:15,medium:40,hard:80,wild:120};
 
@@ -1047,22 +1139,28 @@ function shuffle(arr) {
 
 function pickQuests() {
   const used = new Set([...lastRound, ...completed.slice(0,20).map(q=>q.title)]);
-  // Separate jokers from regular quests
-  const regularPool = ALL_QUESTS.filter(q => !q.joker && !used.has(q.t));
   const jokerPool = ALL_QUESTS.filter(q => q.joker && !used.has(q.t));
-  let pool = regularPool.length >= 5 ? regularPool : [...ALL_QUESTS.filter(q => !q.joker)];
-  pool = shuffle(pool);
-  const result=[];
-  const plan = shuffle(['easy','easy','medium','medium','hard']);
-  for(const diff of plan){
-    const m = pool.find(q=>q.diff===diff&&!result.find(r=>r.t===q.t));
-    result.push(m||pool.find(q=>!result.find(r=>r.t===q.t))||pool[0]);
+  // Apply day mode filter to regular quests
+  let regularPool = ALL_QUESTS.filter(q => !q.joker && !used.has(q.t));
+  const filtered = filterQuestsByDayMode(regularPool);
+  if (filtered.length >= 5) regularPool = filtered;
+  if (regularPool.length < 5) regularPool = [...ALL_QUESTS.filter(q => !q.joker)];
+  regularPool = shuffle(regularPool);
+  const result = [];
+  const mode = getDayMode();
+  // Workday: easier quests only
+  const plan = mode === 'work'
+    ? shuffle(['easy','easy','easy','medium','medium'])
+    : shuffle(['easy','easy','medium','medium','hard']);
+  for (const diff of plan) {
+    const m = regularPool.find(q => q.diff === diff && !result.find(r => r.t === q.t));
+    result.push(m || regularPool.find(q => !result.find(r => r.t === q.t)) || regularPool[0]);
   }
-  if(Math.random()<0.4){
-    const w=ALL_QUESTS.filter(q=>q.diff==='wild'&&!q.joker&&!used.has(q.t));
-    if(w.length) result[4]=w[Math.floor(Math.random()*w.length)];
+  if (mode !== 'work' && Math.random() < 0.4) {
+    const w = ALL_QUESTS.filter(q => q.diff === 'wild' && !q.joker && !used.has(q.t));
+    if (w.length) result[4] = w[Math.floor(Math.random() * w.length)];
   }
-  // Add 1-2 joker quests as bonus slots (don't count toward 10)
+  // Add 1-2 joker quests as bonus
   if (jokerPool.length > 0) {
     const numJokers = Math.random() < 0.5 ? 1 : 2;
     shuffle(jokerPool).slice(0, numJokers).forEach(j => result.push(j));
@@ -1143,6 +1241,11 @@ function renderSkeleton(i) {
 window.loadAllQuests = async function() {
   if(isLoading) return;
   if(dailyUsedCount()>=10){showToast('🛑 Tageslimit von 10 erreicht!');return;}
+  // Show day mode modal if not set for today
+  if (!getDayMode()) {
+    el('dayModeModal').style.display = 'flex';
+    return;
+  }
   isLoading=true;
   lastRound=activeQuests.filter(Boolean).map(q=>q.t).concat(completed.slice(0,5).map(q=>q.title));
   activeQuests=[null,null,null,null,null];
@@ -3731,6 +3834,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       </div>
 
       <button class="btn-new-quest" id="newQuestBtn" style="display:flex"><span>⚡</span> 5 neue Sidequests</button>
+      <div id="dayModeBadge" style="display:none;text-align:center;font-size:0.7rem;color:var(--muted);margin-top:-8px;margin-bottom:8px"></div>
 
       <div class="quest-list" id="questList" style="margin-top:10px">
         <div class="quest-placeholder"><span style="font-size:2rem;display:block;margin-bottom:8px">✨</span>Drück den Knopf — 5 Abenteuer warten!</div>
@@ -3820,6 +3924,28 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 
     <button class="btn-confirm" onclick="sendInvite()" style="margin-bottom:8px">📲 Einladung senden</button>
     <button class="btn-cancel" onclick="closeInviteModal()">Abbrechen</button>
+  </div>
+</div>
+
+<!-- DAY MODE MODAL -->
+<div class="modal-backdrop center" id="dayModeModal" style="display:none">
+  <div class="modal-sheet" style="text-align:center;padding:28px 24px">
+    <div style="font-size:2.5rem;margin-bottom:8px">☀️</div>
+    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.2rem;margin-bottom:6px">Guten Morgen!</div>
+    <div style="font-size:0.8rem;color:var(--muted);margin-bottom:24px">Was ist heute dein Tag?</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      <button onclick="selectDayMode('work')" style="padding:18px 12px;background:var(--surface2);border:2px solid var(--border);border-radius:16px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px">
+        <span style="font-size:1.8rem">💼</span>
+        <span style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.85rem;color:var(--text)">Arbeitstag</span>
+        <span style="font-size:0.68rem;color:var(--muted)">Quests für zwischendurch</span>
+      </button>
+      <button onclick="selectDayMode('free')" style="padding:18px 12px;background:var(--surface2);border:2px solid var(--border);border-radius:16px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px">
+        <span style="font-size:1.8rem">🎉</span>
+        <span style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.85rem;color:var(--text)">Freier Tag</span>
+        <span style="font-size:0.68rem;color:var(--muted)">Alle Quests verfügbar</span>
+      </button>
+    </div>
+    <button onclick="selectDayMode('free');el('dayModeModal').style.display='none'" style="font-size:0.72rem;color:var(--muted);background:none;border:none;cursor:pointer">Überspringen</button>
   </div>
 </div>
 
