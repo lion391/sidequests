@@ -3663,51 +3663,23 @@ window.shareInviteLink = function() {
 
 
 window.debugOneSignal = async function() {
-  let msg = '🔔 OneSignal Debug:\n\n';
   try {
-    msg += window.OneSignal ? '✅ SDK geladen\n' : '❌ SDK NICHT geladen\n';
-
-    // Check service worker
-    if ('serviceWorker' in navigator) {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      msg += `SW registriert: ${regs.length}\n`;
-      regs.forEach((r, i) => {
-        msg += `SW${i}: ${r.scope}\n`;
-      });
-    }
-
+    const lines = [];
+    lines.push('SDK: ' + (window.OneSignal ? 'JA' : 'NEIN'));
     if (window.OneSignal) {
-      const perm = window.OneSignal.Notifications.permission;
-      msg += perm ? '✅ Berechtigung\n' : '❌ Keine Berechtigung\n';
-
-      const sub = window.OneSignal.User?.PushSubscription;
-      msg += 'optedIn: ' + sub?.optedIn + '\n';
-      msg += 'id: ' + (sub?.id || 'null') + '\n';
-      msg += 'token: ' + (sub?.token ? sub.token.substring(0,15)+'...' : 'null') + '\n';
-
-      // Try native push subscription
-      try {
-        const swReg = await navigator.serviceWorker.ready;
-        const nativeSub = await swReg.pushManager.getSubscription();
-        msg += 'Native push sub: ' + (nativeSub ? '✅ ' + JSON.stringify(nativeSub.endpoint).substring(0,30)+'...' : '❌ null') + '\n';
-      } catch(e) { msg += 'Native push error: ' + e.message + '\n'; }
-
-      // Force re-subscribe
-      try {
-        await window.OneSignal.User.PushSubscription.optIn();
-        await new Promise(r => setTimeout(r, 3000));
-        const newId = window.OneSignal.User.PushSubscription.id;
-        msg += 'ID nach optIn: ' + (newId || 'noch null') + '\n';
-        if (newId && currentUser) {
-          await updateDoc(doc(db,'users',currentUser.uid), { osPlayerId: newId });
-          msg += '✅ Gespeichert!\n';
-        }
-      } catch(e) { msg += 'optIn error: ' + e.message + '\n'; }
+      lines.push('Perm: ' + window.OneSignal.Notifications.permission);
+      lines.push('OptedIn: ' + window.OneSignal.User.PushSubscription.optedIn);
+      lines.push('ID: ' + (window.OneSignal.User.PushSubscription.id || 'null'));
+      // Check service workers
+      const regs = await navigator.serviceWorker.getRegistrations();
+      lines.push('SW count: ' + regs.length);
+      regs.forEach((r,i) => lines.push('SW' + i + ': ' + r.scope));
     }
+    showToast(lines.join(' | '), 8000);
+    alert(lines.join('\n'));
   } catch(e) {
-    msg += '❌ Fehler: ' + e.message + '\n';
+    alert('Fehler: ' + e.message);
   }
-  alert(msg);
 };
 
 window.confirmResetPoints = function() {
