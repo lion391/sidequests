@@ -297,6 +297,8 @@ function initMain() {
   loadLocalProgress();
   updateMainUI();
   renderLocalHistory();
+  // Sync score from Firestore in case local was reset
+  syncScoreFromFirestore();
   if (!localStorage.getItem('sq_guided')) {
     el('onboarding').style.display = 'flex';
   }
@@ -1053,6 +1055,21 @@ window.confirmComplete = async function() {
     showToast('Fehler: ' + e.message);
   }
 };
+
+// ── SYNC SCORE FROM FIRESTORE ──
+async function syncScoreFromFirestore() {
+  try {
+    const uDoc = await getDoc(doc(db, 'users', currentUser.uid));
+    if (!uDoc.exists()) return;
+    const firestoreScore = uDoc.data().score || 0;
+    // Always use the higher value — Firestore is source of truth
+    if (firestoreScore > score) {
+      score = firestoreScore;
+      saveLocalProgress();
+      updateMainUI();
+    }
+  } catch(e) {}
+}
 
 // ── FEED CLEANUP ──
 async function cleanupOldFeedEntries() {
