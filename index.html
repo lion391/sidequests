@@ -579,6 +579,8 @@ function showSeasonalEventBanner() {
 // ── MAIN APP ──
 function initMain() {
   loadLocalProgress();
+  // Immediately verify quests were loaded
+  console.log('[SQ] initMain: activeQuests loaded:', activeQuests.filter(Boolean).length, 'key:', activeQuestsKey());
   updateMainUI();
   renderLocalHistory();
   // Sync score from Firestore in case local was reset
@@ -1296,15 +1298,25 @@ window.loadAllQuests = async function() {
       }
     }
   } catch(e) { /* silently ignore */ }
-  for(let i=0;i<5;i++){
-    activeQuests[i]=picked[i];
+  for(let i=0;i<picked.length;i++){
+    if(i < 5) activeQuests[i]=picked[i];
+    else activeQuests.push(picked[i]);
     await new Promise(r=>setTimeout(r,100));
-    const sk=el('card-'+i);
-    if(sk) sk.outerHTML=renderQuestCard(picked[i],i);
+    if(i < 5){
+      const sk=el('card-'+i);
+      if(sk) sk.outerHTML=renderQuestCard(picked[i],i);
+    } else {
+      el('questList').insertAdjacentHTML('beforeend', renderQuestCard(picked[i], i));
+    }
   }
   isLoading=false; btn.disabled=false; btn.style.display='none';
   btn.innerHTML='<span>⚡</span> 5 neue Sidequests';
   saveActiveQuests(); // persist so they survive app close/group switch
+  // Verify save worked
+  const verify = localStorage.getItem(activeQuestsKey());
+  const count = verify ? JSON.parse(verify).filter(Boolean).length : 0;
+  console.log('[SQ] Saved and verified:', count, 'quests');
+  showToast(`⚡ ${count} Quests geladen!`, 1500);
   updateMainUI();
 };
 
