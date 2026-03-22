@@ -1055,25 +1055,37 @@ function getDayMode() {
 window.selectDayMode = function(mode) {
   localStorage.setItem('sq_day_mode', mode);
   localStorage.setItem('sq_day_mode_date', todayKey());
+  localStorage.removeItem('sq_day_mode_locked'); // not locked yet — locked after first load
   el('dayModeModal').style.display = 'none';
   // Update badge
   const badge = el('dayModeBadge');
   if (badge) {
     badge.style.display = 'block';
-    badge.textContent = mode === 'work' ? '💼 Arbeitstag aktiv — klick zum Ändern' : '🎉 Freier Tag aktiv — klick zum Ändern';
-    badge.onclick = () => { localStorage.removeItem('sq_day_mode_date'); el('dayModeModal').style.display = 'flex'; };
-    badge.style.cursor = 'pointer';
+    badge.textContent = mode === 'work' ? '💼 Arbeitstag' : '🎉 Freier Tag';
+    badge.style.cursor = 'default';
+    badge.onclick = null;
   }
   showToast(mode === 'work' ? '💼 Arbeitstag — passende Quests!' : '🎉 Freier Tag — alles möglich!');
   setTimeout(() => loadAllQuests(), 300);
 };
 
 function showDayModeIfNeeded() {
-  // Only show if quests not yet loaded today
   const hasQuests = activeQuests.some(q => q !== null);
   const modeSet = getDayMode();
-  if (!hasQuests && !modeSet) {
+  const locked = localStorage.getItem('sq_day_mode_locked');
+  // Show modal only if no mode set yet today and not locked
+  if (!hasQuests && !modeSet && !locked) {
     el('dayModeModal').style.display = 'flex';
+  }
+  // Update badge if mode already set
+  if (modeSet) {
+    const badge = el('dayModeBadge');
+    if (badge) {
+      badge.style.display = 'block';
+      badge.textContent = modeSet === 'work' ? '💼 Arbeitstag' : '🎉 Freier Tag';
+      badge.style.cursor = 'default';
+      badge.onclick = null;
+    }
   }
 }
 
@@ -1096,8 +1108,9 @@ function scheduleMidnightQuestClear() {
     // Clear all active quests at midnight
     activeQuests = [null, null, null, null, null];
     saveActiveQuests();
-    // Reset day mode for new day
+    // Reset day mode and lock for new day
     localStorage.removeItem('sq_day_mode_date');
+    localStorage.removeItem('sq_day_mode_locked');
     // Refresh UI
     el('questList').innerHTML = '<div class="quest-placeholder"><span style="font-size:2rem;display:block;margin-bottom:8px">✨</span>Drück den Knopf — 5 Abenteuer warten!</div>';
     el('newQuestBtn').style.display = 'flex';
@@ -1241,10 +1254,23 @@ function renderSkeleton(i) {
 window.loadAllQuests = async function() {
   if(isLoading) return;
   if(dailyUsedCount()>=10){showToast('🛑 Tageslimit von 10 erreicht!');return;}
-  // Show day mode modal if not set for today
+  // Show day mode modal if not set for today AND not locked
   if (!getDayMode()) {
     el('dayModeModal').style.display = 'flex';
     return;
+  }
+  // Lock day mode after first quest load
+  if (!localStorage.getItem('sq_day_mode_locked')) {
+    localStorage.setItem('sq_day_mode_locked', '1');
+    // Update badge to show locked (no click to change)
+    const badge = el('dayModeBadge');
+    const mode = getDayMode();
+    if (badge) {
+      badge.style.display = 'block';
+      badge.textContent = mode === 'work' ? '💼 Arbeitstag' : '🎉 Freier Tag';
+      badge.style.cursor = 'default';
+      badge.onclick = null;
+    }
   }
   isLoading=true;
   lastRound=activeQuests.filter(Boolean).map(q=>q.t).concat(completed.slice(0,5).map(q=>q.title));
