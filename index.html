@@ -3579,7 +3579,7 @@ window.showGroupSwitcher = async function() {
     list.innerHTML = snap.docs.map(d => {
       const g = d.data();
       const isCurrent = d.id === groupId;
-      return `<button onclick="switchToGroup('${d.id}','${g.name.replace(/'/g,"\\'")}'')" style="width:100%;padding:14px 16px;background:${isCurrent?'var(--accent)22':'var(--surface2)'};border:2px solid ${isCurrent?'var(--accent)':'var(--border)'};border-radius:14px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;cursor:pointer">
+      return `<button onclick="switchToGroup('${d.id}','${g.name.replace(/'/g,"")}')" style="width:100%;padding:14px 16px;background:${isCurrent?'var(--accent)22':'var(--surface2)'};border:2px solid ${isCurrent?'var(--accent)':'var(--border)'};border-radius:14px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;cursor:pointer">
         <div style="text-align:left">
           <div style="font-weight:700;font-size:0.95rem;color:var(--text)">${g.name}</div>
           <div style="font-size:0.7rem;color:var(--muted)">Code: ${g.code} · ${(g.members||[]).length} Mitglieder</div>
