@@ -586,6 +586,10 @@ function initMain() {
   if (!localStorage.getItem('sq_guided')) {
     el('onboarding').style.display = 'flex';
   }
+  // Double-check: reload from localStorage if activeQuests still empty
+  if (!activeQuests.some(q => q !== null)) {
+    activeQuests = loadActiveQuests();
+  }
   // Reset quest list UI
   if (activeQuests.some(q => q !== null)) {
     const list = el('questList');
@@ -1071,14 +1075,13 @@ window.selectDayMode = function(mode) {
 };
 
 function showDayModeIfNeeded() {
-  const hasQuests = activeQuests.some(q => q !== null);
+  // Check both in-memory AND in localStorage to avoid false negatives after reload
+  const hasQuests = activeQuests.some(q => q !== null) || loadActiveQuests().some(q => q !== null);
   const modeSet = getDayMode();
   const locked = localStorage.getItem('sq_day_mode_locked');
-  // Show modal only if no mode set yet today and not locked
   if (!hasQuests && !modeSet && !locked) {
     el('dayModeModal').style.display = 'flex';
   }
-  // Update badge if mode already set
   if (modeSet) {
     const badge = el('dayModeBadge');
     if (badge) {
@@ -1255,8 +1258,9 @@ function renderSkeleton(i) {
 window.loadAllQuests = async function() {
   if(isLoading) return;
   if(dailyUsedCount()>=10){showToast('🛑 Tageslimit von 10 erreicht!');return;}
-  // Show day mode modal if not set for today AND not locked
-  if (!getDayMode()) {
+  // Show day mode modal only if no quests saved yet today
+  const _savedQ = loadActiveQuests();
+  if (!getDayMode() && !_savedQ.some(q => q !== null)) {
     el('dayModeModal').style.display = 'flex';
     return;
   }
