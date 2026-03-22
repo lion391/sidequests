@@ -2761,6 +2761,8 @@ window.leaveAndSwitchGroup = async function() {
   localStorage.removeItem('sq_groupId');
   showGroupScreen();
 };
+
+window.confirmResetPoints = function() {
   el('settingsModal').style.display = 'none';
   el('confirmResetModal').style.display = 'flex';
 };
