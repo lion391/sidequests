@@ -3669,22 +3669,35 @@ window.debugOneSignal = async function() {
     if (window.OneSignal) {
       const perm = window.OneSignal.Notifications.permission;
       msg += perm ? '✅ Berechtigung erteilt\n' : '❌ Keine Berechtigung\n';
+
+      // Try ALL possible ID locations in OneSignal v16
       const sub = window.OneSignal.User.PushSubscription;
-      const optedIn = sub?.optedIn;
-      msg += optedIn ? '✅ Opted In\n' : '❌ Nicht Opted In\n';
+      msg += '--- Subscription object ---\n';
+      msg += 'id: ' + (sub?.id || 'null') + '\n';
+      msg += 'token: ' + (sub?.token ? sub.token.substring(0,20)+'...' : 'null') + '\n';
+      msg += 'optedIn: ' + sub?.optedIn + '\n';
 
-      // Retry getting ID up to 5 times
-      let id = sub?.id;
-      for (let i = 0; i < 5 && !id; i++) {
-        await new Promise(r => setTimeout(r, 1000));
-        id = window.OneSignal.User.PushSubscription.id;
-      }
-      msg += id ? `✅ Player ID: ${id.substring(0,8)}...\n` : '❌ Keine Player ID nach 5 Versuchen\n';
+      // Try context
+      try {
+        const ctx = window.OneSignal.context;
+        msg += 'context exists: ' + !!ctx + '\n';
+      } catch(e) { msg += 'context error: ' + e.message + '\n'; }
 
-      if (id && currentUser) {
-        await updateDoc(doc(db,'users',currentUser.uid), { osPlayerId: id });
-        msg += '✅ In Firestore gespeichert!\n';
-      }
+      // Try getUserId
+      try {
+        const uid = await window.OneSignal.getUserId?.();
+        msg += 'getUserId: ' + (uid || 'null') + '\n';
+        if (uid && currentUser) {
+          await updateDoc(doc(db,'users',currentUser.uid), { osPlayerId: uid });
+          msg += '✅ Gespeichert via getUserId!\n';
+        }
+      } catch(e) { msg += 'getUserId error: ' + e.message + '\n'; }
+
+      // Try getRegistrationId
+      try {
+        const rid = await window.OneSignal.getRegistrationId?.();
+        msg += 'registrationId: ' + (rid ? rid.substring(0,20)+'...' : 'null') + '\n';
+      } catch(e) {}
     }
   } catch(e) {
     msg += '❌ Fehler: ' + e.message + '\n';
