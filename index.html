@@ -579,8 +579,6 @@ function showSeasonalEventBanner() {
 // ── MAIN APP ──
 function initMain() {
   loadLocalProgress();
-  // Immediately verify quests were loaded
-  console.log('[SQ] initMain: activeQuests loaded:', activeQuests.filter(Boolean).length, 'key:', activeQuestsKey());
   updateMainUI();
   renderLocalHistory();
   // Sync score from Firestore in case local was reset
@@ -632,7 +630,6 @@ function saveActiveQuests() {
     // Strip photos from active quests before saving
     const clean = activeQuests.map(q => q ? {...q, localPhoto: undefined} : null);
     localStorage.setItem(activeQuestsKey(), JSON.stringify(clean));
-    console.log('[SQ] Saved', clean.filter(Boolean).length, 'quests to', activeQuestsKey());
   } catch(e) {
     // Storage full — clear old active quest keys and retry
     Object.keys(localStorage).forEach(key => {
@@ -646,9 +643,7 @@ function saveActiveQuests() {
 function loadActiveQuests() {
   try {
     const raw = localStorage.getItem(activeQuestsKey());
-    const result = raw ? JSON.parse(raw) : [];
-    console.log('[SQ] Loaded', result.filter(Boolean).length, 'quests from', activeQuestsKey());
-    return result;
+    return raw ? JSON.parse(raw) : [];
   } catch(e) { return []; }
 }
 function clearOldActiveQuests() {
@@ -1298,25 +1293,15 @@ window.loadAllQuests = async function() {
       }
     }
   } catch(e) { /* silently ignore */ }
-  for(let i=0;i<picked.length;i++){
-    if(i < 5) activeQuests[i]=picked[i];
-    else activeQuests.push(picked[i]);
+  for(let i=0;i<5;i++){
+    activeQuests[i]=picked[i];
     await new Promise(r=>setTimeout(r,100));
-    if(i < 5){
-      const sk=el('card-'+i);
-      if(sk) sk.outerHTML=renderQuestCard(picked[i],i);
-    } else {
-      el('questList').insertAdjacentHTML('beforeend', renderQuestCard(picked[i], i));
-    }
+    const sk=el('card-'+i);
+    if(sk) sk.outerHTML=renderQuestCard(picked[i],i);
   }
   isLoading=false; btn.disabled=false; btn.style.display='none';
   btn.innerHTML='<span>⚡</span> 5 neue Sidequests';
   saveActiveQuests(); // persist so they survive app close/group switch
-  // Verify save worked
-  const verify = localStorage.getItem(activeQuestsKey());
-  const count = verify ? JSON.parse(verify).filter(Boolean).length : 0;
-  console.log('[SQ] Saved and verified:', count, 'quests');
-  showToast(`⚡ ${count} Quests geladen!`, 1500);
   updateMainUI();
 };
 
@@ -3976,10 +3961,11 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
   <div class="main-header">
     <div class="logo">Side<span>Quest</span></div>
     <div style="display:flex;align-items:center;gap:10px">
-      <button onclick="showGroupSwitcher()" style="background:var(--surface2);border:1px solid var(--border);border-radius:100px;padding:6px 14px;color:var(--text);cursor:pointer;font-size:0.8rem;display:flex;align-items:center;gap:6px;font-weight:600">
-        👥 <span id="headerGroupName" style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Gruppe</span>
-        <span style="font-size:0.6rem;color:var(--muted)">▾</span>
+      <button onclick="showGroupSwitcher()" style="background:var(--surface2);border:1px solid var(--border);border-radius:100px;padding:4px 10px;color:var(--muted);cursor:pointer;font-size:0.7rem;display:flex;align-items:center;gap:4px">
+        <span id="headerGroupName" style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Gruppe</span>
+        <span style="font-size:0.6rem">▾</span>
       </button>
+      <div class="score-chip">🏆 <span class="pts" id="mainScore">0</span> <span style="color:var(--muted)">Pts</span></div>
       <button onclick="showInfoFor(window._getCurrentTab())" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:1rem">ℹ️</button>
       <button onclick="document.getElementById('settingsModal').style.display='flex';initSettings()" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:1rem">⚙️</button>
     </div>
