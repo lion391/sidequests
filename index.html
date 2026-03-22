@@ -2426,14 +2426,6 @@ async function checkFeedBadge() {
       badge.style.display = total > 0 ? 'inline' : 'none';
       badge.textContent = total > 9 ? '9+' : total;
     }
-    // Set app icon badge (works on Android PWA + some desktop browsers)
-    if ('setAppBadge' in navigator) {
-      if (total > 0) {
-        navigator.setAppBadge(total).catch(() => {});
-      } else {
-        navigator.clearAppBadge().catch(() => {});
-      }
-    }
   } catch(e) {}
 }
 
@@ -2441,10 +2433,6 @@ function clearFeedBadge() {
   const badge = el('feedBadge');
   if (badge) { badge.style.display = 'none'; badge.textContent = ''; }
   localStorage.setItem('sq_feed_last_visit', Date.now().toString());
-  // Clear app icon badge
-  if ('clearAppBadge' in navigator) {
-    navigator.clearAppBadge().catch(() => {});
-  }
 }
 
 
