@@ -118,7 +118,7 @@ function showTab(id) {
   el('tab-' + id).style.display = 'block';
   el('tabBtn-' + id).classList.add('active');
   if (id === 'quests') { try { loadWeekQuest(); } catch(e){} try { renderSeasonalQuests(); } catch(e){} }
-  if (id === 'feed') { loadFeed(); clearFeedBadge(); }
+  if (id === 'feed') loadFeed();
   if (id === 'leaderboard') loadLeaderboard();
   if (id === 'fitness') loadFitnessTab();
 }
@@ -317,7 +317,11 @@ async function loadGroup() {
   const hgn = el('headerGroupName');
   if (hgn) hgn.textContent = currentGroup.name;
 
-  // Clean up old listeners first
+  // Reset state for new group
+  activeQuests = [];
+  activeQuestIndex = -1;
+
+  // Clean up old listeners
   if (feedUnsubscribe) { feedUnsubscribe(); feedUnsubscribe = null; }
   if (leaderboardUnsubscribe) { leaderboardUnsubscribe(); leaderboardUnsubscribe = null; }
   Object.values(reactionsUnsubscribes).forEach(u => u && u());
@@ -544,17 +548,11 @@ window.completeSeasonalQuest = function(index, eventName) {
   updateMainUI();
   localStorage.setItem('sq_seasonal_'+eventName+'_'+index, todayKey());
   renderSeasonalQuests();
-  // Save to all groups
-  (async () => {
-    try {
-      const gSnap = await getDocs(query(collection(db,'groups'), where('members','array-contains',currentUser.uid)));
-      await Promise.all(gSnap.docs.map(gDoc => addDoc(collection(db,'completions'), {
-        userId: currentUser.uid, userName: currentUser.displayName||'Anonym',
-        groupId: gDoc.id, questTitle: q.t, questEmoji: q.e, questDiff: q.diff,
-        pts, notes: null, photoUrl: null, date: todayKey(), createdAt: serverTimestamp()
-      })));
-    } catch(e) {}
-  })();
+  addDoc(collection(db,'completions'), {
+    userId: currentUser.uid, userName: currentUser.displayName||'Anonym',
+    groupId, questTitle: q.t, questEmoji: q.e, questDiff: q.diff,
+    pts, notes: null, photoUrl: null, date: todayKey(), createdAt: serverTimestamp()
+  }).catch(()=>{});
   updateDoc(doc(db,'users',currentUser.uid), { score: increment(pts) }).catch(()=>{});
   showToast(event.emoji+' +'+pts+' Punkte!', 2000);
 };
@@ -611,11 +609,10 @@ function initMain() {
   checkDuellNotifications();
   renderSeasonalQuests();
   setTimeout(() => { try { cleanupOldFeedEntries(); } catch(e) {} }, 2000);
-  // Check feed badge on startup and every 5 minutes
-  setTimeout(checkFeedBadge, 3000);
-  setInterval(checkFeedBadge, 5 * 60 * 1000);
+  initPushNotifications();
   scheduleMidnightCleanup();
   scheduleMidnightQuestClear();
+  scheduleMorningNotification();
   // Show day mode prompt if quests not yet loaded today
   setTimeout(() => showDayModeIfNeeded(), 1000);
   fetchWeather && fetchWeather().then && null;
@@ -631,6 +628,7 @@ function activeQuestsKey() {
   return `sq_aq_${todayKey()}`;
 }
 function saveActiveQuests() {
+  if (!groupId) return;
   try {
     // Strip photos from active quests before saving
     const clean = activeQuests.map(q => q ? {...q, localPhoto: undefined} : null);
@@ -1079,7 +1077,7 @@ function showDayModeIfNeeded() {
   const hasQuests = activeQuests.some(q => q !== null);
   const modeSet = getDayMode();
   const locked = localStorage.getItem('sq_day_mode_locked');
-  // Only show if no quests AND no mode set yet AND not locked
+  // Show modal only if no mode set yet today and not locked
   if (!hasQuests && !modeSet && !locked) {
     el('dayModeModal').style.display = 'flex';
   }
@@ -1091,14 +1089,6 @@ function showDayModeIfNeeded() {
       badge.textContent = modeSet === 'work' ? '💼 Arbeitstag' : '🎉 Freier Tag';
       badge.style.cursor = 'default';
       badge.onclick = null;
-    }
-  }
-  // If quests exist but day mode badge not shown, still update badge
-  if (hasQuests && modeSet) {
-    const badge = el('dayModeBadge');
-    if (badge) {
-      badge.style.display = 'block';
-      badge.textContent = modeSet === 'work' ? '💼 Arbeitstag' : '🎉 Freier Tag';
     }
   }
 }
@@ -1505,28 +1495,21 @@ window.confirmComplete = async function() {
     if (activeQuestIndex === pendingIndex) activeQuestIndex = -1;
     saveLocalProgress();
 
-    // Save to Firestore — in ALL groups the user is member of
+    // Save to Firestore — non-blocking, won't stop the flow if it fails
     Promise.all([
-      (async () => {
-        try {
-          // Get all groups user is member of
-          const gSnap = await getDocs(query(collection(db,'groups'), where('members','array-contains',currentUser.uid)));
-          const savePromises = gSnap.docs.map(gDoc => addDoc(collection(db,'completions'), {
-            userId: currentUser.uid,
-            userName: currentUser.displayName||'Anonym',
-            groupId: gDoc.id,
-            questTitle: q.t,
-            questEmoji: q.e,
-            questDiff: q.diff,
-            pts,
-            notes: notes||null,
-            photoUrl: photoUrl||null,
-            date: todayKey(),
-            createdAt: serverTimestamp()
-          }));
-          await Promise.all(savePromises);
-        } catch(e) { console.log('Firestore save error:', e); }
-      })(),
+      addDoc(collection(db,'completions'),{
+        userId: currentUser.uid,
+        userName: currentUser.displayName||'Anonym',
+        groupId,
+        questTitle: q.t,
+        questEmoji: q.e,
+        questDiff: q.diff,
+        pts,
+        notes: notes||null,
+        photoUrl: photoUrl||null,
+        date: todayKey(),
+        createdAt: serverTimestamp()
+      }),
       updateDoc(doc(db,'users',currentUser.uid),{ score: increment(pts) })
     ]).catch(e => console.log('Firestore save error:', e));
 
@@ -1735,13 +1718,10 @@ async function loadFeed() {
       const tb = b.data().createdAt?.seconds||0;
       return tb - ta;
     });
-    const seenIds = JSON.parse(localStorage.getItem('sq_feed_seen_ids') || '[]');
     el('feedList').innerHTML=docs.map(d=>{
       const c=d.data();
       const isMe=c.userId===currentUser.uid;
-      const isNew = !isMe && !seenIds.includes(d.id);
-      return `<div class="feed-card" id="feed-${d.id}" style="${isNew?'border-color:var(--accent);':''}">
-        ${isNew ? `<div style="font-size:0.65rem;font-weight:700;color:var(--accent);padding:6px 14px 0;text-transform:uppercase;letter-spacing:0.05em">🆕 Neu</div>` : ''}
+      return `<div class="feed-card" id="feed-${d.id}">
         <div class="feed-header">
           <div class="feed-avatar">${(c.userName||'?')[0].toUpperCase()}</div>
           <div style="flex:1">
@@ -1776,14 +1756,11 @@ async function loadReactions(completionId) {
       const isMyReaction=r.userId===currentUser.uid;
       const seen=r.seenBy&&r.seenBy.includes(r.targetUserId);
       const isForMe = r.targetUserId === currentUser.uid;
-      const canReplyBack = !isMyReaction && !isForMe; // other people's reactions on someone else's quest
-      return `<div class="reaction-item" style="${isForMe && !seen ? 'border:1px solid var(--accent);background:var(--accent)11;' : ''}" onclick="${r.photoUrl && isForMe ? `viewAndMarkReaction('${completionId}','${d.id}','${r.targetUserId}','${r.photoUrl}')` : `markReactionSeen('${completionId}','${d.id}','${r.targetUserId}')`}">
-        ${isForMe && !seen ? '<span style="font-size:0.6rem;color:var(--accent);font-weight:700;display:block;margin-bottom:3px">👆 Tippen zum Ansehen</span>' : ''}
+      return `<div class="reaction-item" onclick="${r.photoUrl && isForMe ? `viewAndMarkReaction('${completionId}','${d.id}','${r.targetUserId}','${r.photoUrl}')` : `markReactionSeen('${completionId}','${d.id}','${r.targetUserId}')`}">
         ${r.photoUrl?`<img class="reaction-photo" src="${r.photoUrl}">` : ''}
         ${r.text?`<span class="reaction-text">${r.text}</span>`:''}
         <span class="reaction-author">${r.userName}</span>
         ${isMyReaction&&!seen?'<span class="reaction-unseen">●</span>':''}
-        ${isForMe && seen ? `<button onclick="event.stopPropagation();openReactionModal('${completionId}','${r.userId}')" style="margin-left:6px;background:var(--surface2);border:1px solid var(--border);border-radius:100px;padding:2px 8px;font-size:0.65rem;color:var(--muted);cursor:pointer">↩ Antworten</button>` : ''}
       </div>`;
     }).join('');
   });
@@ -1834,9 +1811,6 @@ window.sendReaction = async function() {
   closeReactionModal();
   showToast('Reaktion gesendet! 📸');
   btn.disabled=false; btn.textContent='📸 Senden';
-  // Update badge for target user (they'll see it next time)
-  setTimeout(checkFeedBadge, 1000);
-
 };
 
 window.openCommentModal = function(completionId) {
@@ -1902,7 +1876,8 @@ async function loadLeaderboard() {
     u.displaySub='0 Quests diesen Monat';
     try {
       const mq=query(collection(db,'completions'),
-        where('userId','==',uid));
+        where('userId','==',uid),
+        where('groupId','==',groupId));
       const mSnap=await getDocs(mq);
       const monthDocs=mSnap.docs.filter(d=>{
         const date=d.data().date||'';
@@ -2372,14 +2347,13 @@ window.submitWeekQuestFinal = async function() {
 
   try {
     await updateDoc(doc(db,'users',currentUser.uid), { score: increment(earnedPts) });
-    const gSnap = await getDocs(query(collection(db,'groups'), where('members','array-contains',currentUser.uid)));
-    await Promise.all(gSnap.docs.map(gDoc => addDoc(collection(db,'completions'), {
+    await addDoc(collection(db,'completions'), {
       userId: currentUser.uid, userName: currentUser.displayName||'Anonym',
-      groupId: gDoc.id, questTitle: '🌟 ' + wq.t, questEmoji: wq.e,
+      groupId, questTitle: '🌟 ' + wq.t, questEmoji: wq.e,
       questDiff: 'wild', pts: earnedPts,
       notes: `Wochenquest abgeschlossen! ${checkedDays}/7 Tage 🎉`,
       photoUrl, date: todayKey(), createdAt: serverTimestamp()
-    })));
+    });
   } catch(e) {}
 
   btn.disabled = false; btn.textContent = '🎉 Abschliessen';
@@ -2400,60 +2374,7 @@ window.toggleWeekQuestDesc = function() {
 
 window.completeWeekQuest = window.checkInWeekQuestToday;
 
-// ── FEED BADGE ──
-async function checkFeedBadge() {
-  if (!currentUser || !groupId) return;
-  try {
-    // Count unseen reactions on my completions today
-    const myQ = query(collection(db,'completions'),
-      where('userId','==',currentUser.uid),
-      where('groupId','==',groupId),
-      where('date','==',todayKey()));
-    const mySnap = await getDocs(myQ);
-    let reactionCount = 0;
-    for (const d of mySnap.docs) {
-      const rSnap = await getDocs(collection(db,'completions',d.id,'reactions'));
-      reactionCount += rSnap.docs.filter(r =>
-        !r.data().seenBy?.includes(currentUser.uid) &&
-        r.data().userId !== currentUser.uid
-      ).length;
-    }
-
-    // Count new completions from friends since last feed open
-    const seenIds = JSON.parse(localStorage.getItem('sq_feed_seen_ids') || '[]');
-    const friendQ = query(collection(db,'completions'),
-      where('groupId','==',groupId),
-      where('date','==',todayKey()));
-    const friendSnap = await getDocs(friendQ);
-    const newFriendPosts = friendSnap.docs.filter(d =>
-      d.data().userId !== currentUser.uid &&
-      !seenIds.includes(d.id)
-    ).length;
-
-    const total = reactionCount + newFriendPosts;
-    const badge = el('feedBadge');
-    if (badge) {
-      badge.style.display = total > 0 ? 'inline' : 'none';
-      badge.textContent = total > 9 ? '9+' : String(total);
-    }
-  } catch(e) {}
-}
-
-function clearFeedBadge() {
-  const badge = el('feedBadge');
-  if (badge) { badge.style.display = 'none'; badge.textContent = ''; }
-  // Save all current feed IDs as seen
-  (async () => {
-    try {
-      const snap = await getDocs(query(collection(db,'completions'),
-        where('groupId','==',groupId), where('date','==',todayKey())));
-      const ids = snap.docs.map(d => d.id);
-      localStorage.setItem('sq_feed_seen_ids', JSON.stringify(ids));
-    } catch(e) {}
-  })();
-}
-
-
+// ── INVITE MODAL ──
 let inviteQuestTitle = '';
 let inviteTimeMode = 'spontan';
 let inviteAllGroup = true;
@@ -2517,7 +2438,7 @@ window.toggleInviteAll = function() {
   el('inviteMemberList').style.display = inviteAllGroup ? 'none' : 'flex';
 };
 
-window.sendInvite = async function() {
+window.sendInvite = function() {
   const location = el('inviteLocation').value.trim();
   let timeText = '';
   if (inviteTimeMode === 'spontan') timeText = '⚡ Spontan';
@@ -3709,8 +3630,6 @@ window.shareInviteLink = function() {
 // ── SAISONALE EVENTS ──
 
 
-
-
 window.confirmResetPoints = function() {
   el('settingsModal').style.display = 'none';
   el('confirmResetModal').style.display = 'flex';
@@ -4040,11 +3959,12 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 <div id="screen-main">
   <div class="main-header">
     <div class="logo">Side<span>Quest</span></div>
-    <div style="display:flex;align-items:center;gap:8px">
-      <button onclick="showGroupSwitcher()" style="background:var(--surface2);border:1px solid var(--border);border-radius:100px;padding:6px 12px;color:var(--text);cursor:pointer;font-size:0.8rem;display:flex;align-items:center;gap:5px;font-weight:600">
-        👥 <span id="headerGroupName" style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Gruppe</span>
-        <span style="font-size:0.6rem;color:var(--muted)">▾</span>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button onclick="showGroupSwitcher()" style="background:var(--surface2);border:1px solid var(--border);border-radius:100px;padding:4px 10px;color:var(--muted);cursor:pointer;font-size:0.7rem;display:flex;align-items:center;gap:4px">
+        <span id="headerGroupName" style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Gruppe</span>
+        <span style="font-size:0.6rem">▾</span>
       </button>
+      <div class="score-chip">🏆 <span class="pts" id="mainScore">0</span> <span style="color:var(--muted)">Pts</span></div>
       <button onclick="showInfoFor(window._getCurrentTab())" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:1rem">ℹ️</button>
       <button onclick="document.getElementById('settingsModal').style.display='flex';initSettings()" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:1rem">⚙️</button>
     </div>
@@ -4076,7 +3996,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 
     <div class="tab-bar">
       <button class="tab-btn active" id="tabBtn-quests" onclick="showTab('quests')">⚡ Quests</button>
-      <button class="tab-btn" id="tabBtn-feed" onclick="showTab('feed')">👥 Feed<span id="feedBadge" style="display:none;background:var(--hard);color:#fff;font-size:0.55rem;font-weight:700;padding:1px 5px;border-radius:100px;margin-left:3px;vertical-align:middle"></span></button>
+      <button class="tab-btn" id="tabBtn-feed" onclick="showTab('feed')">👥 Feed</button>
       <button class="tab-btn" id="tabBtn-leaderboard" onclick="showTab('leaderboard')">🏆 Liga</button>
       <button class="tab-btn" id="tabBtn-fitness" onclick="showTab('fitness')">🏃 Fitness</button>
     </div>
@@ -4393,6 +4313,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <button class="btn-cancel" style="margin-bottom:8px;color:var(--medium);border-color:var(--medium)" onclick="confirmResetPoints()">🔄 Meine Punkte zurücksetzen</button>
     <button class="btn-cancel" style="margin-bottom:20px;color:var(--hard);border-color:var(--hard)" onclick="confirmDeleteGroup()">🗑️ Gruppe löschen</button>
 
+    <button class="btn-cancel" onclick="document.getElementById('settingsModal').style.display='none'">Schliessen</button>
   </div>
 </div>
 
@@ -4804,6 +4725,137 @@ window.addEventListener('appinstalled', () => {
 });
 
 // ── LOKALE BENACHRICHTIGUNGEN (geplant, kein Server nötig) ──
+async function initPushNotifications() {
+  const isInstalled = window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true;
+  if (!isInstalled) return;
+  if (!('Notification' in window)) return;
+
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') return;
+
+  scheduleLocalNotifications();
+}
+
+function scheduleLocalNotifications() {
+  if (Notification.permission !== 'granted') return;
+
+  // Only 3 checks per day at fixed times — saves ~95% of notification Firestore reads
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0,10);
+  const lastDay = localStorage.getItem('sq_notif_day');
+  if (lastDay !== todayStr) {
+    localStorage.setItem('sq_notif_day', todayStr);
+    localStorage.removeItem('sq_notif_state'); // reset daily state
+  }
+
+  [
+    { hour: 12, min: 0 },
+    { hour: 17, min: 30 },
+    { hour: 20, min: 0 },
+  ].forEach(s => {
+    const t = new Date();
+    t.setHours(s.hour, s.min, 0, 0);
+    const ms = t - now;
+    if (ms < 0) return;
+    setTimeout(() => checkAndNotify(), ms);
+  });
+}
+
+async function checkAndNotify() {
+  if (Notification.permission !== 'granted') return;
+  if (!currentUser || !groupId) return;
+
+  try {
+    const stateKey = 'sq_notif_state';
+    const prev = JSON.parse(localStorage.getItem(stateKey) || '{}');
+    const now = { ...prev };
+
+    // ── Check 1: Quest progress (local — zero Firestore reads) ──
+    const done = dailyDoneCount();
+    now.done = done;
+    const milestones = [3, 5, 7, 10];
+    if (done > 0 && done !== prev.notifiedDone && milestones.includes(done)) {
+      new Notification('⚡ Quest-Meilenstein!', {
+        body: `${done} Quests heute erledigt! Noch ${10 - done} Slots frei.`,
+        icon: SQ_ICON, tag: 'sq-quests', vibrate: [200,100,200]
+      });
+      now.notifiedDone = done;
+    }
+
+    // ── Check 2: Rangliste (1 read for completions, use cached members) ──
+    const mk = monthKey();
+    const allCompQ = query(collection(db,'completions'),
+      where('groupId','==',groupId),
+      where('date','==',todayKey()));
+    const allSnap = await getDocs(allCompQ);
+
+    // Tally points per user from single query
+    const ptsByUser = {};
+    allSnap.docs.forEach(d => {
+      const uid = d.data().userId;
+      ptsByUser[uid] = (ptsByUser[uid]||0) + (d.data().pts||0);
+    });
+    const myPts = ptsByUser[currentUser.uid] || 0;
+    const myRank = Object.values(ptsByUser).filter(p => p > myPts).length + 1;
+    now.rank = myRank;
+
+    if (prev.rank && myRank > prev.rank) {
+      new Notification('🏆 Überholt!', {
+        body: `Du bist auf Platz ${myRank} zurückgefallen. Hol auf!`,
+        icon: SQ_ICON, tag: 'sq-rank', vibrate: [300,100,300]
+      });
+    } else if (prev.rank && myRank < prev.rank) {
+      new Notification('🏆 Du hast jemanden überholt!', {
+        body: `Du bist jetzt auf Platz ${myRank} in der Rangliste!`,
+        icon: SQ_ICON, tag: 'sq-rank', vibrate: [200,100,200]
+      });
+    }
+
+    // ── Check 3: Freunde aktiv (from same query above — no extra reads) ──
+    const friendCount = allSnap.docs.filter(d=>d.data().userId!==currentUser.uid).length;
+    now.friendCount = friendCount;
+    if (friendCount > 0 && friendCount !== prev.notifiedFriends) {
+      new Notification('👥 Freunde aktiv!', {
+        body: `${friendCount} Quest${friendCount>1?'s':''} von deiner Gruppe heute im Feed!`,
+        icon: SQ_ICON, tag: 'sq-feed', vibrate: [200,100,200]
+      });
+      now.notifiedFriends = friendCount;
+    }
+
+    // ── Check 4: Reaktionen (only my completions — small query) ──
+    const myQ = query(collection(db,'completions'),
+      where('userId','==',currentUser.uid),
+      where('groupId','==',groupId),
+      where('date','==',todayKey()));
+    const mySnap = await getDocs(myQ);
+    let reactionCount = 0;
+    for (const d of mySnap.docs) {
+      const rSnap = await getDocs(collection(db,'completions',d.id,'reactions'));
+      reactionCount += rSnap.docs.filter(r =>
+        !r.data().seenBy?.includes(currentUser.uid) && r.data().userId !== currentUser.uid
+      ).length;
+    }
+    now.reactions = reactionCount;
+    if (reactionCount > 0 && reactionCount !== prev.notifiedReactions) {
+      new Notification('📸 Neue Reaktion!', {
+        body: `Du hast ${reactionCount} neue Reaktion${reactionCount>1?'en':''} auf deine Quests!`,
+        icon: SQ_ICON, tag: 'sq-reaction', vibrate: [200,100,200]
+      });
+      now.notifiedReactions = reactionCount;
+    }
+
+    localStorage.setItem(stateKey, JSON.stringify(now));
+  } catch(e) { /* silent */ }
+}
+
+const SQ_ICON = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDI0IDEwMjQiPgogIDxyZWN0IHdpZHRoPSIxMDI0IiBoZWlnaHQ9IjEwMjQiIHJ4PSIyMzAiIGZpbGw9IiMwZDBkMGYiLz4KICA8Y2lyY2xlIGN4PSI1MTIiIGN5PSI1MTIiIHI9IjM4MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYzhmMTM1IiBzdHJva2Utd2lkdGg9IjE4IiBvcGFjaXR5PSIwLjE1Ii8+CiAgPGNpcmNsZSBjeD0iNTEyIiBjeT0iNTEyIiByPSIzMDAiIGZpbGw9IiMxNDE0MTYiLz4KICA8cG9seWdvbiBwb2ludHM9IjU3MCwxODAgMzgwLDU0MCA1MTAsNTQwIDQ1MCw4NDAgNjYwLDQ2MCA1MjAsNDYwIiBmaWxsPSIjYzhmMTM1Ii8+Cjwvc3ZnPg==';
+
+// Service Worker für Offline + Notifications
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sidequests/firebase-messaging-sw.js')
+    .catch(() => {});
+}
 </script>
 
 <!-- PHOTO LIGHTBOX -->
