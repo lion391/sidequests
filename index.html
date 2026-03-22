@@ -161,7 +161,15 @@ onAuthStateChanged(auth, async user => {
       });
     }
     const gid = localStorage.getItem('sq_groupId');
-    if (gid) {
+    // Check for invite link ?join=CODE
+    const urlParams = new URLSearchParams(window.location.search);
+    const inviteCode = urlParams.get('join');
+    if (inviteCode) {
+      // Clear the URL param without reload
+      window.history.replaceState({}, '', window.location.pathname);
+      // Auto-join the group
+      await autoJoinByCode(inviteCode.toUpperCase());
+    } else if (gid) {
       groupId = gid;
       await loadGroup();
     } else {
@@ -264,7 +272,28 @@ el('btnJoinGroup').onclick = async () => {
   await loadGroup();
 };
 
-async function loadGroup() {
+async function autoJoinByCode(code) {
+  try {
+    showToast('🔗 Trete Gruppe bei...');
+    const q = query(collection(db, 'groups'), where('code', '==', code));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      showToast('Gruppe nicht gefunden');
+      showGroupScreen();
+      return;
+    }
+    const gDoc = snap.docs[0];
+    groupId = gDoc.id;
+    const members = gDoc.data().members || [];
+    if (!members.includes(currentUser.uid)) {
+      await updateDoc(doc(db, 'groups', groupId), { members: [...members, currentUser.uid] });
+    }
+    localStorage.setItem('sq_groupId', groupId);
+    await loadGroup();
+  } catch(e) {
+    showGroupScreen();
+  }
+}
   const gDoc = await getDoc(doc(db, 'groups', groupId));
   if (!gDoc.exists()) {
     localStorage.removeItem('sq_groupId');
@@ -315,6 +344,7 @@ function initMain() {
     el('newQuestBtn').style.display = 'flex';
   }
   showTab('quests');
+  showSeasonalEventBanner();
   listenForTrades();
   listenForChallenges();
   listenForChallengeBadge();
@@ -736,6 +766,17 @@ function pickQuests() {
     const w=ALL_QUESTS.filter(q=>q.diff==='wild'&&!used.has(q.t));
     if(w.length) result[4]=w[Math.floor(Math.random()*w.length)];
   }
+  // Mix in seasonal quests (1-2 slots if event active)
+  try {
+    const event = getCurrentSeasonalEvent();
+    if (event) {
+      const seasonalPool = event.quests.filter(q => !used.has(q.t));
+      if (seasonalPool.length > 0) {
+        const slots = shuffle([0,1,2,3,4]).slice(0, Math.min(2, seasonalPool.length));
+        slots.forEach((slot, i) => { if (seasonalPool[i]) result[slot] = seasonalPool[i]; });
+      }
+    }
+  } catch(e) {}
   return result;
 }
 
@@ -772,6 +813,7 @@ function renderQuestCard(q, i) {
           ${gps?`<span style="font-size:0.6rem;color:var(--accent3);border:1px solid var(--accent3);padding:2px 7px;border-radius:100px">🗺️ GPS</span>`:''}
           ${q.isCommunity&&!q.isGlobal?`<span style="font-size:0.6rem;color:var(--wild);border:1px solid var(--wild);padding:2px 7px;border-radius:100px">✍️ Community</span>`:''}
           ${q.isGlobal?`<span style="font-size:0.6rem;color:var(--accent3);border:1px solid var(--accent3);background:rgba(79,195,247,0.08);padding:2px 7px;border-radius:100px">🌍 Global</span>`:''}
+          ${q.seasonal?`<span style="font-size:0.6rem;color:#f39c12;border:1px solid #f39c12;padding:2px 7px;border-radius:100px">${q.seasonName}</span>`:''}
         </div>
         <div class="quest-title">${q.t}</div>
         <div class="quest-desc">${q.d}</div>
@@ -2776,6 +2818,140 @@ window.leaveAndSwitchGroup = async function() {
   showGroupScreen();
 };
 
+window.shareInviteLink = function() {
+  const code = el('groupCodeDisplay').textContent;
+  const link = `https://lion391.github.io/sidequests/?join=${code}`;
+  if (navigator.share) {
+    navigator.share({
+      title: 'SideQuest ⚡',
+      text: `Tritt meiner SideQuest-Gruppe bei und mach mit!`,
+      url: link
+    });
+  } else {
+    navigator.clipboard.writeText(link).then(() =>
+      showToast('🔗 Einladungslink kopiert!')
+    );
+  }
+};
+
+// ── SAISONALE EVENTS ──
+const SEASONAL_EVENTS = [
+  // Format: { name, emoji, start: [month,day], end: [month,day], color, quests[] }
+  {
+    name: 'Weihnachten',
+    emoji: '🎄',
+    start: [12, 1], end: [12, 31],
+    color: '#c0392b',
+    quests: [
+      {t:'Schreib Weihnachtskarten',d:'Schreib mindestens 3 handgeschriebene Weihnachtskarten und schick sie ab.',diff:'easy',cat:'Sozial',e:'✉️'},
+      {t:'Mach Weihnachtsguetzli',d:'Back heute Guetzli — von Grund auf, nicht aus der Packung.',diff:'medium',cat:'Kochen',e:'🍪'},
+      {t:'Besuch einen Weihnachtsmarkt',d:'Geh auf einen Weihnachtsmarkt, trink einen Glühwein und bleib mindestens eine Stunde.',diff:'easy',cat:'Abenteuer',e:'🎄'},
+      {t:'Schmück deine Wohnung',d:'Weihnachtsdeko aufhängen — Lichterkette, Tannenbaum, was auch immer du hast.',diff:'easy',cat:'Kreativ',e:'✨'},
+      {t:'Mach jemandem ein Geschenk',d:'Kauf oder bastle ein Geschenk für jemanden — nicht zu Weihnachten, einfach so.',diff:'medium',cat:'Sozial',e:'🎁'},
+      {t:'Singe Weihnachtslieder',d:'Sing mindestens 3 Weihnachtslieder durch — alleine, laut, kein Mitsingen zählt nicht.',diff:'easy',cat:'Musik',e:'🎵'},
+    ]
+  },
+  {
+    name: 'Neujahr',
+    emoji: '🎆',
+    start: [1, 1], end: [1, 7],
+    color: '#8e44ad',
+    quests: [
+      {t:'Schreib deine Vorsätze auf',d:'Mindestens 5 konkrete Vorsätze für dieses Jahr — nicht "mehr Sport", sondern was genau.',diff:'easy',cat:'Selbstreflexion',e:'📝'},
+      {t:'Räum deine Wohnung durch',d:'Neues Jahr, neuer Anfang — räum alles auf was du 2024 aufgeschoben hast.',diff:'hard',cat:'Selbstreflexion',e:'🧹'},
+      {t:'Ruf jemanden an den du vermisst',d:'Jahreswechsel ist ein guter Grund — ruf an, nicht schreiben.',diff:'medium',cat:'Sozial',e:'📞'},
+    ]
+  },
+  {
+    name: 'Valentinstag',
+    emoji: '❤️',
+    start: [2, 14], end: [2, 14],
+    color: '#e74c3c',
+    quests: [
+      {t:'Sag jemandem was du an ihm magst',d:'Nicht per Nachricht — direkt sagen. Freund, Familie, Partner.',diff:'easy',cat:'Sozial',e:'❤️'},
+      {t:'Koch ein romantisches Essen',d:'Für dich oder jemand anderen — Kerzen, Tisch decken, richtig kochen.',diff:'medium',cat:'Kochen',e:'🕯️'},
+      {t:'Schreib einen Liebesbrief',d:'An wen du willst — Partner, Freund, Elternteil. Handgeschrieben.',diff:'medium',cat:'Kreativ',e:'💌'},
+    ]
+  },
+  {
+    name: 'Frühling',
+    emoji: '🌸',
+    start: [3, 20], end: [5, 31],
+    color: '#27ae60',
+    quests: [
+      {t:'Pflanz etwas',d:'Kauf eine Pflanze, sä Samen oder pflanz etwas im Garten.',diff:'easy',cat:'Natur',e:'🌱'},
+      {t:'Mach einen Frühjahrsputz',d:'Ein Zimmer komplett — Fenster, hinter Möbel, alles.',diff:'hard',cat:'Selbstreflexion',e:'🧹'},
+      {t:'Mach ein Picknick',d:'Pack eine Tasche mit Essen und iss draussen — auf einer Wiese, im Park.',diff:'easy',cat:'Natur',e:'🧺'},
+      {t:'Geh barfuss auf einer Wiese',d:'Schuhe aus, auf eine Wiese, mindestens 10 Minuten.',diff:'easy',cat:'Natur',e:'🦶'},
+    ]
+  },
+  {
+    name: 'Sommer',
+    emoji: '☀️',
+    start: [6, 21], end: [9, 22],
+    color: '#f39c12',
+    quests: [
+      {t:'Spring in einen See',d:'Such dir einen See und spring rein — kein Zögern, kein "das Wasser ist zu kalt".',diff:'medium',cat:'Abenteuer',e:'🏊'},
+      {t:'Grilliere mit Freunden',d:'Organisiere ein Grillfest — du kümmerst dich um alles.',diff:'medium',cat:'Sozial',e:'🔥'},
+      {t:'Schau den Sonnenuntergang an',d:'Such dir einen schönen Aussichtspunkt und schau bewusst zu wie die Sonne untergeht.',diff:'easy',cat:'Natur',e:'🌅'},
+      {t:'Mach eine Velotour',d:'Mindestens 20km am Stück — such dir eine schöne Route.',diff:'medium',cat:'Sport',e:'🚴'},
+    ]
+  },
+  {
+    name: 'Halloween',
+    emoji: '🎃',
+    start: [10, 28], end: [10, 31],
+    color: '#e67e22',
+    quests: [
+      {t:'Schau einen Horrorfilm',d:'Einen echten — nicht "ein bisschen gruselig". Alleine oder mit jemandem.',diff:'easy',cat:'Abenteuer',e:'👻'},
+      {t:'Schnitz einen Kürbis',d:'Kauf einen Kürbis und schnitz ein Gesicht rein. Mit Kerze drin.',diff:'easy',cat:'Kreativ',e:'🎃'},
+      {t:'Verkleid dich',d:'Heute gehst du verkleidet raus — irgendwohin, egal wo.',diff:'medium',cat:'Abenteuer',e:'🦇'},
+    ]
+  },
+];
+
+function getCurrentSeasonalEvent() {
+  const now = new Date();
+  const m = now.getMonth() + 1;
+  const d = now.getDate();
+  return SEASONAL_EVENTS.find(e => {
+    const [sm, sd] = e.start;
+    const [em, ed] = e.end;
+    if (sm <= em) return (m > sm || (m === sm && d >= sd)) && (m < em || (m === em && d <= ed));
+    // Wraps year (e.g. Dec-Jan)
+    return (m > sm || (m === sm && d >= sd)) || (m < em || (m === em && d <= ed));
+  }) || null;
+}
+
+function showSeasonalEventBanner() {
+  const event = getCurrentSeasonalEvent();
+  const existing = document.getElementById('seasonalBanner');
+  if (existing) existing.remove();
+  if (!event) return;
+
+  // Add seasonal quests to pool temporarily
+  event.quests.forEach(q => {
+    q.seasonal = true;
+    q.seasonName = event.name;
+  });
+
+  // Show banner in quests tab
+  const banner = document.createElement('div');
+  banner.id = 'seasonalBanner';
+  banner.style.cssText = `background:${event.color}22;border:2px solid ${event.color};border-radius:18px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px`;
+  banner.innerHTML = `
+    <div style="font-size:2rem">${event.emoji}</div>
+    <div>
+      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:0.9rem;color:${event.color}">${event.name.toUpperCase()}</div>
+      <div style="font-size:0.72rem;color:var(--muted)">Spezielle ${event.name}-Quests sind jetzt verfügbar!</div>
+    </div>
+  `;
+  const weekBox = document.getElementById('weekQuestBox');
+  if (weekBox) weekBox.after(banner);
+}
+
+// Seasonal quests integrated in original pickQuests above
+
 window.confirmResetPoints = function() {
   el('settingsModal').style.display = 'none';
   el('confirmResetModal').style.display = 'flex';
@@ -3331,6 +3507,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         <span style="color:var(--muted)">Code: <strong id="groupCodeDisplay"></strong></span>
         <button onclick="navigator.clipboard&&navigator.clipboard.writeText(el('groupCodeDisplay').textContent).then(()=>showToast('Code kopiert!'))" style="font-size:0.72rem;color:var(--accent3);background:transparent;border:1px solid var(--accent3);border-radius:6px;padding:3px 8px;cursor:pointer">📋 Kopieren</button>
       </div>
+      <button onclick="shareInviteLink()" style="width:100%;margin-top:8px;padding:8px;background:var(--accent);color:var(--bg);border:none;border-radius:8px;font-family:'Syne',sans-serif;font-weight:700;font-size:0.78rem;cursor:pointer">🔗 Einladungslink teilen</button>
     </div>
     <button class="btn-cancel" style="margin-bottom:20px" onclick="leaveAndSwitchGroup()">👥 Gruppe wechseln</button>
 
