@@ -117,10 +117,10 @@ function showTab(id) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   el('tab-' + id).style.display = 'block';
   el('tabBtn-' + id).classList.add('active');
-  if (id === 'quests') { try { loadWeekQuest(); } catch(e){} try { renderSeasonalQuests(); } catch(e){} }
   if (id === 'feed') loadFeed();
   if (id === 'leaderboard') loadLeaderboard();
   if (id === 'fitness') loadFitnessTab();
+  if (id === 'chat') loadChatTab();
 }
 window.showTab = showTab;
 window.showToast = showToast;
@@ -456,51 +456,28 @@ function renderSeasonalQuests() {
   list.innerHTML = '';
 
   activeEvents.forEach(event => {
-    const id = 'seasonal_' + event.name.replace(/\s/g, '');
-    const doneCount = event.quests.filter((_,i) =>
+    const id = 'seasonal_' + event.name.replace(/\s/g,'');
+    const completedCount = event.quests.filter((_,i) =>
       localStorage.getItem('sq_seasonal_' + event.name + '_' + i) === todayKey()
     ).length;
 
-    // Create wrapper
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'background:var(--surface);border:2px solid ' + event.color + '55;border-radius:16px;margin-bottom:10px;overflow:hidden';
+    // Build accordion wrapper
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'background:var(--surface);border:2px solid ' + event.color + '55;border-radius:16px;margin-bottom:10px;overflow:hidden';
 
-    // Header
+    // Header button
     const header = document.createElement('button');
-    header.type = 'button';
     header.style.cssText = 'width:100%;padding:14px 16px;background:' + event.color + '11;border:none;display:flex;align-items:center;justify-content:space-between;cursor:pointer';
     header.onclick = () => toggleSeasonAccordion(id);
-
-    const left = document.createElement('span');
-    left.style.cssText = 'display:flex;align-items:center;gap:10px';
-
-    const emojiSpan = document.createElement('span');
-    emojiSpan.style.fontSize = '1.5rem';
-    emojiSpan.textContent = event.emoji;
-
-    const nameWrap = document.createElement('span');
-    nameWrap.style.textAlign = 'left';
-
-    const nameDiv = document.createElement('div');
-    nameDiv.style.cssText = 'font-weight:800;font-size:0.9rem;color:' + event.color;
-    nameDiv.textContent = event.name;
-
-    const countDiv = document.createElement('div');
-    countDiv.style.cssText = 'font-size:0.68rem;color:var(--muted)';
-    countDiv.textContent = doneCount + '/' + event.quests.length + ' erledigt';
-
-    nameWrap.appendChild(nameDiv);
-    nameWrap.appendChild(countDiv);
-    left.appendChild(emojiSpan);
-    left.appendChild(nameWrap);
-
-    const chevron = document.createElement('span');
-    chevron.id = id + '_chevron';
-    chevron.style.cssText = 'font-size:0.8rem;color:var(--muted)';
-    chevron.textContent = '▼';
-
-    header.appendChild(left);
-    header.appendChild(chevron);
+    header.innerHTML =
+      '<span style="display:flex;align-items:center;gap:10px">' +
+        '<span style="font-size:1.5rem">' + event.emoji + '<\/span>' +
+        '<span style="text-align:left">' +
+          '<div style="font-weight:800;font-size:0.9rem;color:' + event.color + '">' + event.name + '<\/div>' +
+          '<div style="font-size:0.68rem;color:var(--muted)">' + completedCount + '/' + event.quests.length + ' erledigt<\/div>' +
+        '<\/span>' +
+      '<\/span>' +
+      '<span id="' + id + '_chevron" style="font-size:0.8rem;color:var(--muted)">&#9660;<\/span>';
 
     // Content
     const contentDiv = document.createElement('div');
@@ -512,69 +489,40 @@ function renderSeasonalQuests() {
       const done = localStorage.getItem('sq_seasonal_' + event.name + '_' + i) === todayKey();
 
       const card = document.createElement('div');
-      card.style.cssText = 'padding:14px 16px;border-bottom:1px solid var(--border)' + (done ? ';opacity:0.5' : '');
+      card.style.cssText = 'padding:14px 16px;border-bottom:1px solid var(--border);opacity:' + (done ? '0.5' : '1');
 
-      const row = document.createElement('div');
-      row.style.cssText = 'display:flex;gap:10px;align-items:flex-start';
-
-      const emoji = document.createElement('div');
-      emoji.style.fontSize = '1.3rem';
-      emoji.textContent = q.e;
-
-      const body = document.createElement('div');
-      body.style.flex = '1';
-
-      const meta = document.createElement('div');
-      meta.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:4px;flex-wrap:wrap';
-
-      const diffBadge = document.createElement('span');
-      diffBadge.className = 'diff-badge diff-' + q.diff;
-      diffBadge.textContent = DIFF_DE[q.diff];
-
-      const ptsBadge = document.createElement('span');
-      ptsBadge.className = 'pts-inline pts-' + q.diff;
-      ptsBadge.textContent = '+' + pts + ' Pts';
-
-      meta.appendChild(diffBadge);
-      meta.appendChild(ptsBadge);
-
-      const title = document.createElement('div');
-      title.style.cssText = 'font-weight:700;font-size:0.9rem;margin-bottom:3px';
-      title.textContent = q.t;
-
-      const desc = document.createElement('div');
-      desc.style.cssText = 'font-size:0.72rem;color:var(--muted);line-height:1.5';
-      desc.textContent = q.d;
-
-      body.appendChild(meta);
-      body.appendChild(title);
-      body.appendChild(desc);
-      row.appendChild(emoji);
-      row.appendChild(body);
-      card.appendChild(row);
+      const top = document.createElement('div');
+      top.style.cssText = 'display:flex;gap:10px;align-items:flex-start';
+      top.innerHTML =
+        '<div style="font-size:1.3rem">' + q.e + '<\/div>' +
+        '<div style="flex:1">' +
+          '<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;flex-wrap:wrap">' +
+            '<span class="diff-badge diff-' + q.diff + '">' + DIFF_DE[q.diff] + '<\/span>' +
+            '<span class="pts-inline pts-' + q.diff + '">+' + pts + ' Pts<\/span>' +
+          '<\/div>' +
+          '<div style="font-family:var(--font-syne,sans-serif);font-weight:700;font-size:0.9rem;margin-bottom:3px">' + q.t + '<\/div>' +
+          '<div style="font-size:0.72rem;color:var(--muted);line-height:1.5">' + q.d + '<\/div>' +
+        '<\/div>';
+      card.appendChild(top);
 
       if (done) {
-        const doneLabel = document.createElement('div');
-        doneLabel.style.cssText = 'margin-top:8px;font-size:0.72rem;color:var(--muted)';
-        doneLabel.textContent = '✅ Heute erledigt';
-        card.appendChild(doneLabel);
+        const doneDiv = document.createElement('div');
+        doneDiv.style.cssText = 'margin-top:8px;font-size:0.72rem;color:var(--muted)';
+        doneDiv.textContent = '✅ Heute erledigt';
+        card.appendChild(doneDiv);
       } else {
         const btn = document.createElement('button');
-        btn.type = 'button';
         btn.style.cssText = 'width:100%;margin-top:10px;padding:9px;background:' + event.color + '22;color:' + event.color + ';border:1px solid ' + event.color + '66;border-radius:10px;font-weight:700;font-size:0.78rem;cursor:pointer';
         btn.textContent = '✅ Erledigt! +' + pts + ' Pts';
-        const capturedI = i;
-        const capturedName = event.name;
-        btn.onclick = () => completeSeasonalQuest(capturedI, capturedName);
+        btn.onclick = () => completeSeasonalQuest(i, event.name);
         card.appendChild(btn);
       }
-
       contentDiv.appendChild(card);
     });
 
-    wrap.appendChild(header);
-    wrap.appendChild(contentDiv);
-    list.appendChild(wrap);
+    wrapper.appendChild(header);
+    wrapper.appendChild(contentDiv);
+    list.appendChild(wrapper);
   });
 }
 
@@ -632,42 +580,37 @@ function initMain() {
   loadLocalProgress();
   updateMainUI();
   renderLocalHistory();
-
-  // Show quest list
-  if (activeQuests.some(q => q !== null)) {
-    const list = el('questList');
-    if (list) {
-      list.innerHTML = '';
-      activeQuests.forEach((q, i) => {
-        if (q) list.insertAdjacentHTML('beforeend', renderQuestCard(q, i));
-      });
-    }
-    const btn = el('newQuestBtn');
-    if (btn) btn.style.display = 'none';
-  } else {
-    const list = el('questList');
-    if (list) list.innerHTML = '<div class="quest-placeholder"><span style="font-size:2rem;display:block;margin-bottom:8px">✨</span>Drück den Knopf — 5 Abenteuer warten!</div>';
-    const btn = el('newQuestBtn');
-    if (btn) btn.style.display = 'flex';
-  }
-
-  showTab('quests');
-
+  // Sync score from Firestore in case local was reset
+  syncScoreFromFirestore();
   if (!localStorage.getItem('sq_guided')) {
     el('onboarding').style.display = 'flex';
   }
-
-  // All non-critical calls wrapped individually
-  try { syncScoreFromFirestore(); } catch(e) {}
-  try { listenForTrades(); } catch(e) {}
-  try { listenForChallenges(); } catch(e) {}
-  try { listenForChallengeBadge(); } catch(e) {}
-  try { loadWeekQuest(); } catch(e) {}
-  try { checkDuellNotifications(); } catch(e) {}
-  try { renderSeasonalQuests(); } catch(e) { console.log('seasonal err:', e); }
-  try { initPushNotifications(); } catch(e) {}
-  try { scheduleMidnightCleanup(); } catch(e) {}
+  // Reset quest list UI
+  if (activeQuests.some(q => q !== null)) {
+    const list = el('questList');
+    list.innerHTML = '';
+    activeQuests.forEach((q, i) => {
+      if (q) list.insertAdjacentHTML('beforeend', renderQuestCard(q, i));
+    });
+    el('newQuestBtn').style.display = 'none';
+  } else {
+    el('questList').innerHTML = '<div class="quest-placeholder"><span style="font-size:2rem;display:block;margin-bottom:8px">✨</span>Drück den Knopf — 5 Abenteuer warten!</div>';
+    el('newQuestBtn').style.display = 'flex';
+  }
+  showTab('quests');
+  showSeasonalEventBanner();
+  listenForTrades();
+  listenForChallenges();
+  listenForChallengeBadge();
+  loadWeekQuest();
+  checkDuellNotifications();
+  renderSeasonalQuests();
+  updateChatBadge();
   setTimeout(() => { try { cleanupOldFeedEntries(); } catch(e) {} }, 2000);
+  initPushNotifications();
+  scheduleMidnightCleanup();
+  fetchWeather && fetchWeather().then && null;
+  cleanupOldFeedEntries();
 }
 
 // ── LOCAL PROGRESS ──
@@ -2044,14 +1987,14 @@ window.declineTrade = async function() {
 let guideStep=0;
 window.guideNext = function() {
   guideStep++;
-  if(guideStep>=10){
+  if(guideStep>=9){
     localStorage.setItem('sq_guided','1');
     el('onboarding').style.display='none';
     return;
   }
   document.querySelectorAll('.guide-slide').forEach((s,i)=>s.classList.toggle('active',i===guideStep));
   document.querySelectorAll('.guide-dot').forEach((d,i)=>d.classList.toggle('active',i===guideStep));
-  el('guideNextBtn').textContent=guideStep===9?'Loslegen ⚡':'Weiter →';
+  el('guideNextBtn').textContent=guideStep===8?'Loslegen ⚡':'Weiter →';
 };
 
 // ── SEASONAL QUEST FILTERING ──
@@ -3544,8 +3487,8 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent3));border-radius:10px;transition:width 0.6s cubic-bezier(0.34,1.56,0.64,1);}
 
 /* TABS */
-.tab-bar{display:grid;grid-template-columns:repeat(5,1fr);background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:4px;margin-bottom:14px;gap:3px;}
-.tab-btn{padding:9px 2px;border:none;background:transparent;color:var(--muted);font-family:'Space Mono',monospace;font-size:0.6rem;cursor:pointer;border-radius:10px;transition:all 0.2s;white-space:nowrap;text-align:center;}
+.tab-bar{display:grid;grid-template-columns:repeat(4,1fr);background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:4px;margin-bottom:14px;gap:3px;}
+.tab-btn{padding:9px 4px;border:none;background:transparent;color:var(--muted);font-family:'Space Mono',monospace;font-size:0.68rem;cursor:pointer;border-radius:10px;transition:all 0.2s;white-space:nowrap;text-align:center;}
 .tab-btn.active{background:var(--accent);color:var(--bg);font-weight:700;}
 
 /* QUEST CARDS */
@@ -3693,48 +3636,43 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       <div class="guide-text">Du bekommst 5 zufällige Aufgaben pro Tag — max. 10 Slots: erledigen oder skippen, beides zählt. Nicht erledigte Quests werden am nächsten Tag automatisch gelöscht.</div>
     </div>
     <div class="guide-slide" id="slide-2">
-      <div class="guide-emoji">🌸</div>
-      <div class="guide-title">Saisonale Quests</div>
-      <div class="guide-text">Je nach Jahreszeit gibt es spezielle Quests — Frühlingsputz, Sommercamping, Herbstwanderung oder Weihnachtsguetzli. Diese sind grösser und geben bis zu 200 Punkte. Du findest sie ganz oben im Quests-Tab.</div>
-    </div>
-    <div class="guide-slide" id="slide-3">
-      <div class="guide-emoji">🌟</div>
-      <div class="guide-title">Wochenquest</div>
-      <div class="guide-text">Jede Woche gibt es eine gemeinsame Quest für die ganze Gruppe — bis zu 200 Punkte. Tippe darauf um die Beschreibung zu sehen. Sie läuft von Montag bis Sonntag.</div>
-    </div>
-    <div class="guide-slide" id="slide-4">
       <div class="guide-emoji">📸</div>
       <div class="guide-title">Beweisfoto & BeReal</div>
       <div class="guide-text">Beim Abschliessen machst du ein Foto — normal oder BeReal (Vorder + Rückkamera gleichzeitig). Im Feed sehen es deine Freunde. Tippe auf ein Foto um es im Vollbild zu sehen.</div>
     </div>
-    <div class="guide-slide" id="slide-5">
+    <div class="guide-slide" id="slide-3">
       <div class="guide-emoji">🗺️</div>
       <div class="guide-title">GPS bei Lauf-Quests</div>
-      <div class="guide-text">Bei Lauf-, Wander- oder Velo-Quests erscheint ein ▶ Start Button. Der GPS-Tracker zeichnet deine Strecke als anonyme Linie — keine Koordinaten, kein Tempo gespeichert.</div>
+      <div class="guide-text">Bei Lauf-, Wander- oder Velo-Quests erscheint ein ▶ Start Button. Der GPS-Tracker zeichnet deine Strecke als anonyme Linie — keine Koordinaten, kein Tempo, kein Ort gespeichert.</div>
     </div>
-    <div class="guide-slide" id="slide-6">
+    <div class="guide-slide" id="slide-4">
       <div class="guide-emoji">⚔️</div>
       <div class="guide-title">Duelle & eigene Quests</div>
-      <div class="guide-text">Fordere Freunde mit Punkteinsatz heraus — wer scheitert zahlt. Oder erstell eigene Quests für die Gruppe oder global für alle SideQuest-Gruppen weltweit.</div>
+      <div class="guide-text">Im Quests-Tab findest du zwei Unterordner: "Duelle" — fordere Freunde heraus mit Punkteinsatz. "Eigene Quests" — erstell Aufgaben für die Gruppe oder global für alle SideQuest-Gruppen weltweit.</div>
     </div>
-    <div class="guide-slide" id="slide-7">
+    <div class="guide-slide" id="slide-5">
       <div class="guide-emoji">👥</div>
       <div class="guide-title">Feed & Reaktionen</div>
-      <div class="guide-text">Im Feed siehst du was deine Gruppe heute erledigt hat. Reagiere mit einem Snapchat-Foto — es verschwindet nach dem Ansehen. Kommentare bleiben den ganzen Tag. Der Feed wird täglich um Mitternacht geleert.</div>
+      <div class="guide-text">Im Feed siehst du was du und deine Gruppe heute erledigt haben. Reagiere mit einem Snapchat-Foto — es verschwindet nach dem Ansehen. Der Feed wird täglich um Mitternacht geleert.</div>
+    </div>
+    <div class="guide-slide" id="slide-6">
+      <div class="guide-emoji">🏅</div>
+      <div class="guide-title">Monats-Rangliste & Preis</div>
+      <div class="guide-text">Die Rangliste resettet jeden Monat. Stimmt im Feed oder der Rangliste ab um was gespielt wird — Abendessen, Kinokarte, was auch immer. Erster gewinnt, Letzter zahlt.</div>
+    </div>
+    <div class="guide-slide" id="slide-7">
+      <div class="guide-emoji">🏃</div>
+      <div class="guide-title">Fitness & Wochensieger</div>
+      <div class="guide-text">Im Fitness-Tab: Läufe tracken und +10 Pts pro km sammeln — zusätzlich zu deinen Quests. Wer diese Woche am meisten läuft bekommt am Sonntag +100 Bonuspunkte.</div>
     </div>
     <div class="guide-slide" id="slide-8">
-      <div class="guide-emoji">🏆</div>
-      <div class="guide-title">Rangliste & Monatspreis</div>
-      <div class="guide-text">Die Rangliste resettet jeden Monat. Stimmt ab um was gespielt wird — Erster gewinnt, Letzter zahlt. Im Fitness-Tab: Läufe tracken für +10 Pts/km, Wochensieger bekommt +100 Bonuspunkte.</div>
-    </div>
-    <div class="guide-slide" id="slide-9">
-      <div class="guide-emoji">🚀</div>
+      <div class="guide-emoji">🌟</div>
       <div class="guide-title">Los geht's!</div>
-      <div class="guide-text">Lade Freunde per Einladungslink ein — in den Einstellungen findest du deinen Link. Das ℹ️ oben zeigt dir jederzeit Hilfe. Viel Spass — raus aus dem Feed, rein ins Leben!</div>
+      <div class="guide-text">Wochenquest oben im Tab gibt bis zu 200 Punkte. Mit 🔄 kannst du Quests an Freunde tauschen. Das ℹ️ Icon oben zeigt dir jederzeit Hilfe zum aktuellen Tab.</div>
     </div>
   </div>
   <div class="guide-dots" id="guideDots">
-    <div class="guide-dot active"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div>
+    <div class="guide-dot active"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div>
   </div>
   <button class="btn-guide-next" id="guideNextBtn" onclick="guideNext()">Weiter →</button>
 </div>
@@ -3816,6 +3754,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       <button class="tab-btn" id="tabBtn-feed" onclick="showTab('feed')">👥 Feed</button>
       <button class="tab-btn" id="tabBtn-leaderboard" onclick="showTab('leaderboard')">🏆 Liga</button>
       <button class="tab-btn" id="tabBtn-fitness" onclick="showTab('fitness')">🏃 Fitness</button>
+      <button class="tab-btn" id="tabBtn-chat" onclick="showTab('chat')">💬 Chat<span id="chatUnreadBadge" style="display:none;background:var(--hard);color:#fff;font-size:0.55rem;font-weight:700;padding:1px 5px;border-radius:100px;margin-left:3px;vertical-align:middle"></span></button>
     </div>
 
     <!-- QUESTS TAB -->
@@ -3916,6 +3855,27 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       <div id="fitnessLeaderboard"></div>
       <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin:18px 0 10px">Meine Läufe</div>
       <div id="fitnessRunList"></div>
+    </div>
+
+    <!-- CHAT TAB -->
+    <div class="tab-content" id="tab-chat" style="display:none">
+      <!-- List view -->
+      <div id="chatView-list">
+        <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:12px">💬 Direktnachrichten</div>
+        <div id="chatMemberList"></div>
+      </div>
+      <!-- Convo view -->
+      <div id="chatView-convo" style="display:none;flex-direction:column;height:calc(100vh - 200px)">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+          <button onclick="closeChatConvo()" style="background:transparent;border:none;color:var(--accent);font-size:1.1rem;cursor:pointer;padding:0">←</button>
+          <div id="chatConvoName" style="font-family:'Syne',sans-serif;font-weight:800;font-size:1rem;flex:1"></div>
+        </div>
+        <div id="chatMessages" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:10px;min-height:0"></div>
+        <div style="display:flex;gap:8px;padding-top:8px;align-items:flex-end;border-top:1px solid var(--border)">
+          <textarea id="chatInput" placeholder="Nachricht..." rows="1" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:10px 14px;color:var(--text);font-size:0.9rem;resize:none;font-family:inherit;max-height:100px" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
+          <button onclick="sendChatMessage()" style="background:var(--accent);color:var(--bg);border:none;border-radius:50%;width:42px;height:42px;font-size:1.2rem;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center">↑</button>
+        </div>
+      </div>
     </div>
 
   </div>
