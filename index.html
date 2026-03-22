@@ -170,22 +170,14 @@ onAuthStateChanged(auth, async user => {
         createdAt: serverTimestamp()
       });
     }
-    // Check for pending invite join first
+    // Check for pending invite join
     const pendingJoin = localStorage.getItem('sq_pending_join');
     if (pendingJoin) {
       await processPendingJoin();
       return;
     }
     const gid = localStorage.getItem('sq_groupId');
-    // Check for invite link ?join=CODE
-    const urlParams = new URLSearchParams(window.location.search);
-    const inviteCode = urlParams.get('join');
-    if (inviteCode) {
-      // Clear the URL param without reload
-      window.history.replaceState({}, '', window.location.pathname);
-      // Auto-join the group
-      await autoJoinByCode(inviteCode.toUpperCase());
-    } else if (gid) {
+    if (gid) {
       groupId = gid;
       await loadGroup();
     } else {
