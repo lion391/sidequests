@@ -117,10 +117,10 @@ function showTab(id) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   el('tab-' + id).style.display = 'block';
   el('tabBtn-' + id).classList.add('active');
+  if (id === 'quests') { try { loadWeekQuest(); } catch(e){} try { renderSeasonalQuests(); } catch(e){} }
   if (id === 'feed') loadFeed();
   if (id === 'leaderboard') loadLeaderboard();
   if (id === 'fitness') loadFitnessTab();
-  if (id === 'chat') loadChatTab();
 }
 window.showTab = showTab;
 window.showToast = showToast;
@@ -659,14 +659,12 @@ function initMain() {
 
   // All non-critical calls wrapped individually
   try { syncScoreFromFirestore(); } catch(e) {}
-  try { showSeasonalEventBanner(); } catch(e) {}
   try { listenForTrades(); } catch(e) {}
   try { listenForChallenges(); } catch(e) {}
   try { listenForChallengeBadge(); } catch(e) {}
   try { loadWeekQuest(); } catch(e) {}
   try { checkDuellNotifications(); } catch(e) {}
   try { renderSeasonalQuests(); } catch(e) { console.log('seasonal err:', e); }
-  try { updateChatBadge(); } catch(e) {}
   try { initPushNotifications(); } catch(e) {}
   try { scheduleMidnightCleanup(); } catch(e) {}
   setTimeout(() => { try { cleanupOldFeedEntries(); } catch(e) {} }, 2000);
@@ -3818,7 +3816,6 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       <button class="tab-btn" id="tabBtn-feed" onclick="showTab('feed')">👥 Feed</button>
       <button class="tab-btn" id="tabBtn-leaderboard" onclick="showTab('leaderboard')">🏆 Liga</button>
       <button class="tab-btn" id="tabBtn-fitness" onclick="showTab('fitness')">🏃 Fitness</button>
-      <button class="tab-btn" id="tabBtn-chat" onclick="showTab('chat')">💬 Chat<span id="chatUnreadBadge" style="display:none;background:var(--hard);color:#fff;font-size:0.55rem;font-weight:700;padding:1px 5px;border-radius:100px;margin-left:3px;vertical-align:middle"></span></button>
     </div>
 
     <!-- QUESTS TAB -->
@@ -3919,27 +3916,6 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       <div id="fitnessLeaderboard"></div>
       <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin:18px 0 10px">Meine Läufe</div>
       <div id="fitnessRunList"></div>
-    </div>
-
-    <!-- CHAT TAB -->
-    <div class="tab-content" id="tab-chat" style="display:none">
-      <!-- List view -->
-      <div id="chatView-list">
-        <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:12px">💬 Direktnachrichten</div>
-        <div id="chatMemberList"></div>
-      </div>
-      <!-- Convo view -->
-      <div id="chatView-convo" style="display:none;flex-direction:column;height:calc(100vh - 200px)">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)">
-          <button onclick="closeChatConvo()" style="background:transparent;border:none;color:var(--accent);font-size:1.1rem;cursor:pointer;padding:0">←</button>
-          <div id="chatConvoName" style="font-family:'Syne',sans-serif;font-weight:800;font-size:1rem;flex:1"></div>
-        </div>
-        <div id="chatMessages" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:10px;min-height:0"></div>
-        <div style="display:flex;gap:8px;padding-top:8px;align-items:flex-end;border-top:1px solid var(--border)">
-          <textarea id="chatInput" placeholder="Nachricht..." rows="1" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:10px 14px;color:var(--text);font-size:0.9rem;resize:none;font-family:inherit;max-height:100px" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
-          <button onclick="sendChatMessage()" style="background:var(--accent);color:var(--bg);border:none;border-radius:50%;width:42px;height:42px;font-size:1.2rem;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center">↑</button>
-        </div>
-      </div>
     </div>
 
   </div>
