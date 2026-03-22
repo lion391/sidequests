@@ -635,7 +635,6 @@ function activeQuestsKey() {
   return `sq_aq_${todayKey()}`;
 }
 function saveActiveQuests() {
-  if (!groupId) return;
   try {
     // Strip photos from active quests before saving
     const clean = activeQuests.map(q => q ? {...q, localPhoto: undefined} : null);
