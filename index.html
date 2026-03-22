@@ -120,6 +120,7 @@ function showTab(id) {
   if (id === 'feed') loadFeed();
   if (id === 'leaderboard') loadLeaderboard();
   if (id === 'fitness') loadFitnessTab();
+  if (id === 'chat') loadChatTab();
 }
 window.showTab = showTab;
 window.showToast = showToast;
@@ -604,6 +605,7 @@ function initMain() {
   loadWeekQuest();
   checkDuellNotifications();
   renderSeasonalQuests();
+  updateChatBadge();
   setTimeout(() => { try { cleanupOldFeedEntries(); } catch(e) {} }, 2000);
   initPushNotifications();
   scheduleMidnightCleanup();
@@ -1050,7 +1052,7 @@ function isGpsQuest(q) {
 let activeQuestIndex = -1;
 
 function renderQuestCard(q, i) {
-  const pts = DIFF_PTS[q.diff];
+  const pts = q.isQuestOfDay ? q.pts : DIFF_PTS[q.diff];
   const seen = hasPrevHistory(q.t);
   const gps = isGpsQuest(q) || (q.requiresGps && !((q.t+q.d).toLowerCase().includes('schwimm')));
   const isActive = activeQuestIndex === i;
@@ -1062,7 +1064,8 @@ function renderQuestCard(q, i) {
       <div class="quest-body">
         <div class="quest-meta">
           <span class="diff-badge diff-${q.diff}">${DIFF_DE[q.diff]}</span>
-          <span class="pts-inline pts-${q.diff}">+${pts} Pts</span>
+          <span class="pts-inline pts-${q.diff}">+${pts} Pts${q.isQuestOfDay?' ×2':''}</span>
+          ${q.isQuestOfDay?`<span style="font-size:0.6rem;color:#f59e0b;border:1px solid #f59e0b;background:#f59e0b18;padding:2px 7px;border-radius:100px">⭐ Quest des Tages</span>`:''}
           ${seen?`<span class="seen-badge" onclick="showQuestHistory('${q.t.replace(/'/g,"\\'")}')">📂 Verlauf</span>`:''}
           ${gps?`<span style="font-size:0.6rem;color:var(--accent3);border:1px solid var(--accent3);padding:2px 7px;border-radius:100px">🗺️ GPS</span>`:''}
           ${q.isCommunity&&!q.isGlobal?`<span style="font-size:0.6rem;color:var(--wild);border:1px solid var(--wild);padding:2px 7px;border-radius:100px">✍️ Community</span>`:''}
@@ -1104,6 +1107,8 @@ window.loadAllQuests = async function() {
   btn.disabled=true; btn.innerHTML='<div class="spinner"></div> Laden...';
   el('questList').innerHTML=[0,1,2,3,4].map(i=>renderSkeleton(i)).join('');
   const picked=pickQuests();
+  // Mark one random quest as Quest of the Day (2x points)
+  const pickedWithQod = markQuestOfDay(picked);
 
   // Mix in community quests (~30% chance, max 2 slots)
   try {
@@ -1113,15 +1118,15 @@ window.loadAllQuests = async function() {
       const available = communityPool.filter(q => !usedTitles.has(q.t));
       if (available.length > 0) {
         const slots = shuffle([0,1,2,3,4]).slice(0, Math.min(2, available.length));
-        slots.forEach((slot, i) => { if(available[i]) picked[slot] = available[i]; });
+        slots.forEach((slot, i) => { if(available[i]) pickedWithQod[slot] = available[i]; });
       }
     }
   } catch(e) { /* silently ignore */ }
   for(let i=0;i<5;i++){
-    activeQuests[i]=picked[i];
+    activeQuests[i]=pickedWithQod[i];
     await new Promise(r=>setTimeout(r,100));
     const sk=el('card-'+i);
-    if(sk) sk.outerHTML=renderQuestCard(picked[i],i);
+    if(sk) sk.outerHTML=renderQuestCard(pickedWithQod[i],i);
   }
   isLoading=false; btn.disabled=false; btn.style.display='none';
   btn.innerHTML='<span>⚡</span> 5 neue Sidequests';
@@ -1554,6 +1559,12 @@ async function loadFeed() {
         ${c.photoUrl?`<img class="feed-photo" src="${c.photoUrl}" alt="Beweis" onclick="openPhotoLightbox('${c.photoUrl}')" style="cursor:zoom-in">` : ''}
         ${c.notes?`<div class="feed-note">"${c.notes}"</div>`:''}
         <div class="feed-reactions" id="reactions-${d.id}"></div>
+        <div style="display:flex;align-items:center;gap:6px;padding:6px 12px 2px;flex-wrap:wrap">
+          <div id="emojireacts-${d.id}" style="display:flex;gap:4px;flex-wrap:wrap;flex:1"></div>
+          ${isMe ? '' : `<div style="display:flex;gap:6px">
+            ${['👏','🔥','😂','❤️','💀'].map(e=>`<button onclick="sendEmojiReact('${d.id}','${c.userId}','${e}')" style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 8px;font-size:0.85rem;cursor:pointer">${e}</button>`).join('')}
+          </div>`}
+        </div>
         ${isMe ? '' : `<div class="feed-react-bar">
           <button class="react-btn" onclick="openReactionModal('${d.id}','${c.userId}')">📸 Reaktion</button>
           <button class="react-btn" onclick="openCommentModal('${d.id}')">💬 Kommentar</button>
@@ -1561,7 +1572,10 @@ async function loadFeed() {
       </div>`;
     }).join('');
     // Load reactions for each
-    snap.docs.forEach(d=>loadReactions(d.id));
+    snap.docs.forEach(d => {
+      loadReactions(d.id);
+      loadEmojiReacts(d.id);
+    });
   });
 }
 
@@ -2509,7 +2523,243 @@ function openFitnessTrackerInner(mode, questIdx) {
   el('gpsModal').style.display = 'flex';
 }
 
-// ── FITNESS TAB ──
+// ── EMOJI REACTIONS ──
+window.sendEmojiReact = async function(completionId, targetUserId, emoji) {
+  try {
+    // Check if already reacted with this emoji
+    const reactsRef = collection(db,'completions',completionId,'emojireacts');
+    const existing = await getDocs(query(reactsRef,
+      where('userId','==',currentUser.uid),
+      where('emoji','==',emoji)));
+    if (!existing.empty) {
+      // Toggle off
+      await deleteDoc(doc(db,'completions',completionId,'emojireacts',existing.docs[0].id));
+    } else {
+      await addDoc(reactsRef, {
+        userId: currentUser.uid,
+        userName: currentUser.displayName||'Anonym',
+        emoji, createdAt: serverTimestamp()
+      });
+    }
+    loadEmojiReacts(completionId);
+  } catch(e) {}
+};
+
+async function loadEmojiReacts(completionId) {
+  const container = el('emojireacts-'+completionId);
+  if (!container) return;
+  try {
+    const snap = await getDocs(collection(db,'completions',completionId,'emojireacts'));
+    const counts = {};
+    snap.docs.forEach(d => {
+      const e = d.data().emoji;
+      counts[e] = (counts[e]||[]);
+      counts[e].push(d.data().userName);
+    });
+    container.innerHTML = Object.entries(counts).map(([emoji, users]) =>
+      `<button onclick="sendEmojiReact('${completionId}','','${emoji}')" style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 9px;font-size:0.82rem;cursor:pointer;display:flex;align-items:center;gap:4px">
+        ${emoji} <span style="font-size:0.72rem;color:var(--muted)">${users.length}</span>
+      </button>`
+    ).join('');
+  } catch(e) {}
+}
+
+// ── CHAT ──
+let currentChatUid = null;
+let currentChatName = null;
+let chatUnsubscribe = null;
+
+if (typeof showTab !== 'undefined') {
+  const _origShowTab = showTab;
+}
+
+async function loadChatTab() {
+  if (!groupId || !currentUser) return;
+  const gDoc = await getDoc(doc(db,'groups',groupId));
+  const members = (gDoc.data().members||[]).filter(uid => uid !== currentUser.uid);
+
+  // Load member list
+  const memberListEl = el('chatMemberList');
+  if (!memberListEl) return;
+  memberListEl.innerHTML = '';
+  for (const uid of members) {
+    const uDoc = await getDoc(doc(db,'users',uid));
+    const name = uDoc.exists() ? uDoc.data().name : 'Anonym';
+    const btn = document.createElement('div');
+    btn.style.cssText = 'display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:14px;margin-bottom:8px;cursor:pointer';
+    btn.onclick = () => openChatWith(uid, name);
+    btn.innerHTML =
+      '<div style="width:38px;height:38px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-family:var(--font-syne,sans-serif);font-weight:800;font-size:1rem">' + name[0].toUpperCase() + '</div>' +
+      '<div style="flex:1">' +
+        '<div style="font-weight:700;font-size:0.9rem">' + name + '</div>' +
+        '<div style="font-size:0.7rem;color:var(--muted)">Tippe zum Schreiben</div>' +
+      '</div>' +
+      '<div style="font-size:0.8rem;color:var(--muted)">›</div>';
+    memberListEl.appendChild(btn);
+  }
+
+  // Load recent conversations
+  await loadConversationList();
+}
+
+async function loadConversationList() {
+  const listEl = el('chatConversationList');
+  if (!listEl) return;
+  try {
+    const q = query(collection(db,'messages'),
+      where('participants','array-contains',currentUser.uid),
+      orderBy('lastAt','desc'));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      listEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:0.8rem">Noch keine Nachrichten.</div>';
+      return;
+    }
+    listEl.innerHTML = '';
+    for (const d of snap.docs) {
+      const data = d.data();
+      const otherUid = data.participants.find(p => p !== currentUser.uid);
+      if (!otherUid) continue;
+      const uDoc = await getDoc(doc(db,'users',otherUid));
+      const name = uDoc.exists() ? uDoc.data().name : 'Anonym';
+      const unread = (data.unread||{})[currentUser.uid] || 0;
+      const div = document.createElement('div');
+      div.style.cssText = 'display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:14px;margin-bottom:8px;cursor:pointer';
+      div.onclick = () => openChatWith(otherUid, name);
+      div.innerHTML =
+        '<div style="width:38px;height:38px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-weight:800">' + name[0].toUpperCase() + '</div>' +
+        '<div style="flex:1">' +
+          '<div style="font-weight:700;font-size:0.9rem">' + name + '</div>' +
+          '<div style="font-size:0.72rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px">' + (data.lastMsg||'') + '</div>' +
+        '</div>' +
+        (unread > 0 ? '<div style="background:var(--hard);color:#fff;font-size:0.65rem;font-weight:700;padding:2px 7px;border-radius:100px">' + unread + '</div>' : '');
+      listEl.appendChild(div);
+    }
+  } catch(e) {}
+}
+
+function getChatId(uid1, uid2) {
+  return [uid1, uid2].sort().join('_');
+}
+
+window.openChatWith = async function(uid, name) {
+  currentChatUid = uid;
+  currentChatName = name;
+  el('chatView-list').style.display = 'none';
+  const convoEl = el('chatView-convo');
+  convoEl.style.display = 'flex';
+  el('chatConvoName').textContent = name;
+  el('chatMessages').innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:0.8rem">Lade...</div>';
+
+  const chatId = getChatId(currentUser.uid, uid);
+
+  // Mark as read
+  try {
+    const chatRef = doc(db,'messages',chatId);
+    const chatDoc = await getDoc(chatRef);
+    if (chatDoc.exists()) {
+      const unread = chatDoc.data().unread || {};
+      unread[currentUser.uid] = 0;
+      await updateDoc(chatRef, { unread });
+      updateChatBadge();
+    }
+  } catch(e) {}
+
+  // Listen for messages
+  if (chatUnsubscribe) chatUnsubscribe();
+  const msgsRef = collection(db,'messages',chatId,'msgs');
+  chatUnsubscribe = onSnapshot(query(msgsRef, orderBy('createdAt','asc')), snap => {
+    const container = el('chatMessages');
+    if (!container) return;
+    if (snap.empty) {
+      container.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:0.8rem">Noch keine Nachrichten.<br>Schreib etwas! 👋</div>';
+      return;
+    }
+    container.innerHTML = snap.docs.map(d => {
+      const m = d.data();
+      const isMe = m.userId === currentUser.uid;
+      return '<div style="display:flex;justify-content:' + (isMe?'flex-end':'flex-start') + ';margin-bottom:4px">' +
+        '<div style="max-width:75%;padding:9px 13px;border-radius:' + (isMe?'18px 18px 4px 18px':'18px 18px 18px 4px') + ';background:' + (isMe?'var(--accent)':'var(--surface)') + ';color:' + (isMe?'var(--bg)':'var(--text)') + ';font-size:0.88rem;border:' + (isMe?'none':'1px solid var(--border)') + '">' +
+          '<div>' + m.text + '</div>' +
+          '<div style="font-size:0.6rem;opacity:0.6;margin-top:3px;text-align:right">' + (m.createdAt?.toDate?.()?.toLocaleTimeString('de-CH',{hour:'2-digit',minute:'2-digit'})||'') + '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    container.scrollTop = container.scrollHeight;
+  });
+};
+
+window.closeChatConvo = function() {
+  if (chatUnsubscribe) { chatUnsubscribe(); chatUnsubscribe = null; }
+  currentChatUid = null;
+  el('chatView-convo').style.display = 'none';
+  el('chatView-list').style.display = 'block';
+  loadConversationList();
+};
+
+window.sendChatMessage = async function() {
+  const input = el('chatInput');
+  const text = input.value.trim();
+  if (!text || !currentChatUid) return;
+  input.value = '';
+  input.style.height = 'auto';
+
+  const chatId = getChatId(currentUser.uid, currentChatUid);
+  const chatRef = doc(db,'messages',chatId);
+
+  try {
+    // Add message
+    await addDoc(collection(db,'messages',chatId,'msgs'), {
+      userId: currentUser.uid,
+      userName: currentUser.displayName||'Anonym',
+      text, createdAt: serverTimestamp()
+    });
+    // Update conversation metadata
+    const chatDoc = await getDoc(chatRef);
+    const unread = chatDoc.exists() ? (chatDoc.data().unread||{}) : {};
+    unread[currentChatUid] = (unread[currentChatUid]||0) + 1;
+    const data = {
+      participants: [currentUser.uid, currentChatUid],
+      lastMsg: text.length > 50 ? text.slice(0,50)+'...' : text,
+      lastAt: serverTimestamp(),
+      unread
+    };
+    if (chatDoc.exists()) await updateDoc(chatRef, data);
+    else await setDoc(chatRef, data);
+  } catch(e) { showToast('Fehler: ' + e.message); }
+};
+
+// Enter to send
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey && document.activeElement === el('chatInput')) {
+    e.preventDefault();
+    sendChatMessage();
+  }
+});
+
+async function updateChatBadge() {
+  try {
+    const q = query(collection(db,'messages'), where('participants','array-contains',currentUser.uid));
+    const snap = await getDocs(q);
+    let total = 0;
+    snap.docs.forEach(d => { total += (d.data().unread||{})[currentUser.uid]||0; });
+    const badge = el('chatUnreadBadge');
+    if (!badge) return;
+    if (total > 0) { badge.style.display='inline'; badge.textContent=total; }
+    else { badge.style.display='none'; }
+  } catch(e) {}
+}
+
+// ── QUEST DES TAGES (2x Punkte, zufällig in den 5) ──
+function markQuestOfDay(quests) {
+  if (!quests || quests.length === 0) return quests;
+  const key = 'sq_qod_' + todayKey();
+  let idx = parseInt(localStorage.getItem(key));
+  if (isNaN(idx)) {
+    idx = Math.floor(Math.random() * quests.length);
+    localStorage.setItem(key, idx);
+  }
+  return quests.map((q, i) => i === idx ? {...q, isQuestOfDay: true, pts: (DIFF_PTS[q.diff]||10) * 2} : q);
+}
 async function loadFitnessTab() {
   const week = getWeekNumber();
   const year = new Date().getFullYear();
@@ -3505,6 +3755,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       <button class="tab-btn" id="tabBtn-feed" onclick="showTab('feed')">👥 Feed</button>
       <button class="tab-btn" id="tabBtn-leaderboard" onclick="showTab('leaderboard')">🏆 Liga</button>
       <button class="tab-btn" id="tabBtn-fitness" onclick="showTab('fitness')">🏃 Fitness</button>
+      <button class="tab-btn" id="tabBtn-chat" onclick="showTab('chat')">💬 Chat<span id="chatUnreadBadge" style="display:none;background:var(--hard);color:#fff;font-size:0.55rem;font-weight:700;padding:1px 5px;border-radius:100px;margin-left:3px;vertical-align:middle"></span></button>
     </div>
 
     <!-- QUESTS TAB -->
@@ -3607,13 +3858,31 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       <div id="fitnessRunList"></div>
     </div>
 
-    <!-- HISTORY TAB -->
-    <div class="tab-content" id="tab-history" style="display:none">
-      <div class="section-title" id="localHistoryTitle" style="display:none">Deine erledigten Quests</div>
-      <div id="localHistoryList"></div>
+    <!-- CHAT TAB -->
+    <div class="tab-content" id="tab-chat" style="display:none">
+      <div id="chatView-list">
+        <!-- Conversation list -->
+        <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:12px">Nachrichten</div>
+        <div id="chatConversationList">
+          <div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:0.8rem">Noch keine Nachrichten.<br>Tippe auf ein Mitglied um zu schreiben.</div>
+        </div>
+        <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin:18px 0 10px">Gruppe</div>
+        <div id="chatMemberList"></div>
+      </div>
+
+      <!-- Single conversation view -->
+      <div id="chatView-convo" style="display:none;display:flex;flex-direction:column;height:calc(100vh - 220px)">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+          <button onclick="closeChatConvo()" style="background:transparent;border:none;color:var(--accent);font-size:1rem;cursor:pointer;padding:0">← Zurück</button>
+          <div id="chatConvoName" style="font-family:'Syne',sans-serif;font-weight:800;font-size:1rem"></div>
+        </div>
+        <div id="chatMessages" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-bottom:8px"></div>
+        <div style="display:flex;gap:8px;margin-top:10px;align-items:flex-end">
+          <textarea id="chatInput" placeholder="Nachricht..." rows="1" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:10px 14px;color:var(--text);font-size:0.9rem;resize:none;font-family:inherit;max-height:100px" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
+          <button onclick="sendChatMessage()" style="background:var(--accent);color:var(--bg);border:none;border-radius:50%;width:40px;height:40px;font-size:1.1rem;cursor:pointer;flex-shrink:0">↑</button>
+        </div>
+      </div>
     </div>
-  </div>
-</div>
 
 <!-- PROOF MODAL -->
 <div class="modal-backdrop" id="proofModal" style="display:none">
