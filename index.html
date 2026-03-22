@@ -2641,8 +2641,18 @@ window.gpsPause = function() {
 
 window.selectGpsActivity = function(type, btn) {
   gpsActivityType = type;
-  document.querySelectorAll('.gps-act-btn').forEach(b => b.classList.remove('active'));
+  // Reset all buttons to inactive style
+  document.querySelectorAll('.gps-act-btn').forEach(b => {
+    b.classList.remove('active');
+    b.style.background = 'var(--surface2)';
+    b.style.borderColor = 'var(--border)';
+    b.style.color = 'var(--muted)';
+  });
+  // Activate selected button
   btn.classList.add('active');
+  btn.style.background = 'var(--accent)22';
+  btn.style.borderColor = 'var(--accent)';
+  btn.style.color = 'var(--accent)';
   // Update save button label
   const labels = { run: '🏃 Lauf speichern', velo: '🚴 Fahrt speichern', walk: '🚶 Wanderung speichern' };
   const saveBtn = el('gpsSaveFitnessBtn');
@@ -2774,8 +2784,19 @@ function openFitnessTrackerInner(mode, questIdx) {
   // Show/hide activity selector
   const actSel = el('gpsActivitySelector');
   if (actSel) actSel.style.display = mode === 'fitness' ? 'flex' : 'none';
-  // Reset activity buttons
-  document.querySelectorAll('.gps-act-btn').forEach((b,i) => b.classList.toggle('active', i === 0));
+  // Reset activity buttons styling
+  document.querySelectorAll('.gps-act-btn').forEach((b, i) => {
+    b.classList.toggle('active', i === 0);
+    if (i === 0) {
+      b.style.background = 'var(--accent)22';
+      b.style.borderColor = 'var(--accent)';
+      b.style.color = 'var(--accent)';
+    } else {
+      b.style.background = 'var(--surface2)';
+      b.style.borderColor = 'var(--border)';
+      b.style.color = 'var(--muted)';
+    }
+  });
   if (mode === 'quest') el('proofModal').style.display = 'none';
   el('gpsModal').style.display = 'flex';
 }
@@ -3861,7 +3882,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 
     <!-- FITNESS TAB -->
     <div class="tab-content" id="tab-fitness" style="display:none">
-      <button class="btn-new-quest" onclick="openFitnessTracker()" style="margin-bottom:16px">🏃 Lauf starten — +10 Pts / km</button>
+      <button class="btn-new-quest" onclick="openFitnessTracker()" style="margin-bottom:16px">⚡ Aktivität auswählen & starten</button>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:14px">
         <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:12px">Diese Woche</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
