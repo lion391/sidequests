@@ -3666,38 +3666,43 @@ window.debugOneSignal = async function() {
   let msg = '🔔 OneSignal Debug:\n\n';
   try {
     msg += window.OneSignal ? '✅ SDK geladen\n' : '❌ SDK NICHT geladen\n';
+
+    // Check service worker
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      msg += `SW registriert: ${regs.length}\n`;
+      regs.forEach((r, i) => {
+        msg += `SW${i}: ${r.scope}\n`;
+      });
+    }
+
     if (window.OneSignal) {
       const perm = window.OneSignal.Notifications.permission;
-      msg += perm ? '✅ Berechtigung erteilt\n' : '❌ Keine Berechtigung\n';
+      msg += perm ? '✅ Berechtigung\n' : '❌ Keine Berechtigung\n';
 
-      // Try ALL possible ID locations in OneSignal v16
-      const sub = window.OneSignal.User.PushSubscription;
-      msg += '--- Subscription object ---\n';
-      msg += 'id: ' + (sub?.id || 'null') + '\n';
-      msg += 'token: ' + (sub?.token ? sub.token.substring(0,20)+'...' : 'null') + '\n';
+      const sub = window.OneSignal.User?.PushSubscription;
       msg += 'optedIn: ' + sub?.optedIn + '\n';
+      msg += 'id: ' + (sub?.id || 'null') + '\n';
+      msg += 'token: ' + (sub?.token ? sub.token.substring(0,15)+'...' : 'null') + '\n';
 
-      // Try context
+      // Try native push subscription
       try {
-        const ctx = window.OneSignal.context;
-        msg += 'context exists: ' + !!ctx + '\n';
-      } catch(e) { msg += 'context error: ' + e.message + '\n'; }
+        const swReg = await navigator.serviceWorker.ready;
+        const nativeSub = await swReg.pushManager.getSubscription();
+        msg += 'Native push sub: ' + (nativeSub ? '✅ ' + JSON.stringify(nativeSub.endpoint).substring(0,30)+'...' : '❌ null') + '\n';
+      } catch(e) { msg += 'Native push error: ' + e.message + '\n'; }
 
-      // Try getUserId
+      // Force re-subscribe
       try {
-        const uid = await window.OneSignal.getUserId?.();
-        msg += 'getUserId: ' + (uid || 'null') + '\n';
-        if (uid && currentUser) {
-          await updateDoc(doc(db,'users',currentUser.uid), { osPlayerId: uid });
-          msg += '✅ Gespeichert via getUserId!\n';
+        await window.OneSignal.User.PushSubscription.optIn();
+        await new Promise(r => setTimeout(r, 3000));
+        const newId = window.OneSignal.User.PushSubscription.id;
+        msg += 'ID nach optIn: ' + (newId || 'noch null') + '\n';
+        if (newId && currentUser) {
+          await updateDoc(doc(db,'users',currentUser.uid), { osPlayerId: newId });
+          msg += '✅ Gespeichert!\n';
         }
-      } catch(e) { msg += 'getUserId error: ' + e.message + '\n'; }
-
-      // Try getRegistrationId
-      try {
-        const rid = await window.OneSignal.getRegistrationId?.();
-        msg += 'registrationId: ' + (rid ? rid.substring(0,20)+'...' : 'null') + '\n';
-      } catch(e) {}
+      } catch(e) { msg += 'optIn error: ' + e.message + '\n'; }
     }
   } catch(e) {
     msg += '❌ Fehler: ' + e.message + '\n';
