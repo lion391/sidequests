@@ -1735,9 +1735,12 @@ async function loadFeed() {
       const c=d.data();
       const isMe=c.userId===currentUser.uid;
       const myPhoto = isMe ? localStorage.getItem('sq_profile_photo') : null;
+      const avatarHtml = myPhoto
+        ? `<img src="${myPhoto}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid var(--accent)">`
+        : `<div class="feed-avatar">${(c.userName||'?')[0].toUpperCase()}</div>`;
       return `<div class="feed-card" id="feed-${d.id}">
         <div class="feed-header">
-          ${renderAvatar(c.userName, c.userId, 36, myPhoto)}
+          ${avatarHtml}
           <div style="flex:1">
             <div class="feed-username">${isMe?'Du':c.userName}</div>
             <div class="feed-time">${c.questEmoji} ${c.questTitle}</div>
@@ -1916,7 +1919,7 @@ async function loadLeaderboard() {
     const isLast=i===users.length-1&&users.length>1;
     return `<div class="lb-item ${isMe?'lb-me':''}" style="${isLast?'border-color:var(--hard)':''}">
       <div class="lb-rank">${isLast&&!isFirst?'😬':medals[i]||i+1}</div>
-      ${renderAvatar(u.name, u.uid, 38, u.photo||null)}
+      ${u.photo ? `<img src="${u.photo}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:2px solid var(--accent)">` : `<div class="lb-avatar">${(u.name||'?')[0].toUpperCase()}</div>`}
       <div style="flex:1">
         <div class="lb-name">${u.name||'Anonym'}${isMe?' (Du)':''}</div>
         <div class="lb-sub">${u.displaySub}</div>
