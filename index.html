@@ -1729,15 +1729,17 @@ async function loadFeed() {
     const uids = [...new Set(snap.docs.map(d => d.data().userId))];
     const profileMap = {};
     await Promise.all(uids.map(async uid => {
-      if (_profilePhotoCache[uid]) {
+      // Check cache first
+      if (_profilePhotoCache[uid] && typeof _profilePhotoCache[uid] === 'object') {
         profileMap[uid] = _profilePhotoCache[uid];
         return;
       }
       try {
         const uDoc = await getDoc(doc(db,'users',uid));
         if (uDoc.exists()) {
-          profileMap[uid] = { photo: uDoc.data().photo||null, name: uDoc.data().name||null };
-          if (uDoc.data().photo) _profilePhotoCache[uid] = uDoc.data().photo;
+          const profile = { photo: uDoc.data().photo||null, name: uDoc.data().name||null };
+          profileMap[uid] = profile;
+          _profilePhotoCache[uid] = profile; // cache as object
         }
       } catch(e) {}
     }));
