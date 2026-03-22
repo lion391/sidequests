@@ -332,81 +332,175 @@ function showGroupScreen() {
 }
 
 const SEASONAL_EVENTS = [
-  // Format: { name, emoji, start: [month,day], end: [month,day], color, quests[] }
   {
-    name: 'Weihnachten',
-    emoji: '🎄',
-    start: [12, 1], end: [12, 31],
-    color: '#c0392b',
+    name: 'Weihnachten', emoji: '🎄',
+    start: [12, 1], end: [12, 31], color: '#c0392b',
     quests: [
-      {t:'Schreib Weihnachtskarten',d:'Schreib mindestens 3 handgeschriebene Weihnachtskarten und schick sie ab.',diff:'easy',cat:'Sozial',e:'✉️'},
+      {t:'Schreib Weihnachtskarten',d:'Mindestens 3 handgeschriebene Weihnachtskarten schreiben und abschicken.',diff:'easy',cat:'Sozial',e:'✉️'},
       {t:'Mach Weihnachtsguetzli',d:'Back heute Guetzli — von Grund auf, nicht aus der Packung.',diff:'medium',cat:'Kochen',e:'🍪'},
       {t:'Besuch einen Weihnachtsmarkt',d:'Geh auf einen Weihnachtsmarkt, trink einen Glühwein und bleib mindestens eine Stunde.',diff:'easy',cat:'Abenteuer',e:'🎄'},
-      {t:'Schmück deine Wohnung',d:'Weihnachtsdeko aufhängen — Lichterkette, Tannenbaum, was auch immer du hast.',diff:'easy',cat:'Kreativ',e:'✨'},
-      {t:'Mach jemandem ein Geschenk',d:'Kauf oder bastle ein Geschenk für jemanden — nicht zu Weihnachten, einfach so.',diff:'medium',cat:'Sozial',e:'🎁'},
-      {t:'Singe Weihnachtslieder',d:'Sing mindestens 3 Weihnachtslieder durch — alleine, laut, kein Mitsingen zählt nicht.',diff:'easy',cat:'Musik',e:'🎵'},
+      {t:'Schmück deine Wohnung',d:'Weihnachtsdeko aufhängen — Lichterkette, Tannenbaum, alles raus.',diff:'easy',cat:'Kreativ',e:'✨'},
+      {t:'Mach jemandem ein Geschenk',d:'Kauf oder bastle ein Geschenk für jemanden — einfach so, ohne Anlass.',diff:'medium',cat:'Sozial',e:'🎁'},
+      {t:'Singe Weihnachtslieder',d:'Sing mindestens 3 Weihnachtslieder durch — alleine, laut.',diff:'easy',cat:'Musik',e:'🎵'},
+      {t:'Schau einen Weihnachtsfilm',d:'Einen klassischen Weihnachtsfilm — alleine oder mit jemandem, mit Decke und Tee.',diff:'easy',cat:'Abenteuer',e:'🍿'},
+      {t:'Koch Weihnachtsessen',d:'Bereite ein richtiges Weihnachtsessen zu — Fondue, Raclette oder ein Festmenü.',diff:'hard',cat:'Kochen',e:'🫕'},
+      {t:'Verschenk etwas Selbstgemachtes',d:'Bastle oder kreiere ein selbstgemachtes Geschenk für jemanden.',diff:'medium',cat:'Kreativ',e:'🎀'},
     ]
   },
   {
-    name: 'Neujahr',
-    emoji: '🎆',
-    start: [1, 1], end: [1, 7],
-    color: '#8e44ad',
+    name: 'Neujahr', emoji: '🎆',
+    start: [1, 1], end: [1, 7], color: '#8e44ad',
     quests: [
-      {t:'Schreib deine Vorsätze auf',d:'Mindestens 5 konkrete Vorsätze für dieses Jahr — nicht "mehr Sport", sondern was genau.',diff:'easy',cat:'Selbstreflexion',e:'📝'},
-      {t:'Räum deine Wohnung durch',d:'Neues Jahr, neuer Anfang — räum alles auf was du 2024 aufgeschoben hast.',diff:'hard',cat:'Selbstreflexion',e:'🧹'},
+      {t:'Schreib deine Vorsätze auf',d:'Mindestens 5 konkrete Vorsätze — nicht "mehr Sport", sondern was genau und wie.',diff:'easy',cat:'Selbstreflexion',e:'📝'},
+      {t:'Räum deine Wohnung durch',d:'Neues Jahr, neuer Anfang — räum alles auf was du aufgeschoben hast.',diff:'hard',cat:'Selbstreflexion',e:'🧹'},
       {t:'Ruf jemanden an den du vermisst',d:'Jahreswechsel ist ein guter Grund — ruf an, nicht schreiben.',diff:'medium',cat:'Sozial',e:'📞'},
+      {t:'Schreib einen Brief an dein zukünftiges Ich',d:'Was wünschst du dir für das neue Jahr? Versiegeln und in einem Jahr öffnen.',diff:'medium',cat:'Selbstreflexion',e:'💌'},
+      {t:'Mach eine Jahres-Review',d:'Was war dieses Jahr gut? Was willst du ändern? 30 Minuten reflektieren.',diff:'easy',cat:'Selbstreflexion',e:'🔍'},
     ]
   },
   {
-    name: 'Valentinstag',
-    emoji: '❤️',
-    start: [2, 14], end: [2, 14],
-    color: '#e74c3c',
+    name: 'Valentinstag', emoji: '❤️',
+    start: [2, 14], end: [2, 14], color: '#e74c3c',
     quests: [
       {t:'Sag jemandem was du an ihm magst',d:'Nicht per Nachricht — direkt sagen. Freund, Familie, Partner.',diff:'easy',cat:'Sozial',e:'❤️'},
       {t:'Koch ein romantisches Essen',d:'Für dich oder jemand anderen — Kerzen, Tisch decken, richtig kochen.',diff:'medium',cat:'Kochen',e:'🕯️'},
       {t:'Schreib einen Liebesbrief',d:'An wen du willst — Partner, Freund, Elternteil. Handgeschrieben.',diff:'medium',cat:'Kreativ',e:'💌'},
+      {t:'Überrasch jemanden',d:'Tu heute etwas Unerwartetes Nettes für jemanden — gross oder klein.',diff:'easy',cat:'Sozial',e:'🌹'},
     ]
   },
   {
-    name: 'Frühling',
-    emoji: '🌸',
-    start: [3, 20], end: [5, 31],
-    color: '#27ae60',
+    name: 'Frühling', emoji: '🌸',
+    start: [3, 20], end: [5, 31], color: '#27ae60',
     quests: [
       {t:'Pflanz etwas',d:'Kauf eine Pflanze, sä Samen oder pflanz etwas im Garten.',diff:'easy',cat:'Natur',e:'🌱'},
-      {t:'Mach einen Frühjahrsputz',d:'Ein Zimmer komplett — Fenster, hinter Möbel, alles.',diff:'hard',cat:'Selbstreflexion',e:'🧹'},
-      {t:'Mach ein Picknick',d:'Pack eine Tasche mit Essen und iss draussen — auf einer Wiese, im Park.',diff:'easy',cat:'Natur',e:'🧺'},
+      {t:'Mach einen Frühjahrsputz',d:'Ein Zimmer komplett — Fenster, hinter Möbeln, alles.',diff:'hard',cat:'Selbstreflexion',e:'🧹'},
+      {t:'Mach ein Picknick',d:'Pack Essen ein und iss draussen — auf einer Wiese oder im Park.',diff:'easy',cat:'Natur',e:'🧺'},
       {t:'Geh barfuss auf einer Wiese',d:'Schuhe aus, auf eine Wiese, mindestens 10 Minuten.',diff:'easy',cat:'Natur',e:'🦶'},
+      {t:'Sammel Wildblumen',d:'Geh raus und sammel einen kleinen Strauss Wildblumen.',diff:'easy',cat:'Natur',e:'💐'},
+      {t:'Frühlingsspaziergang im Wald',d:'Mindestens 1 Stunde im Wald spazieren — langsam, bewusst, kein Handy.',diff:'easy',cat:'Natur',e:'🌲'},
+      {t:'Koch mit frischen Frühlingskräutern',d:'Kauf frische Kräuter und koch ein Gericht das sie als Hauptzutat hat.',diff:'medium',cat:'Kochen',e:'🌿'},
+      {t:'Sitz draussen beim Frühstück',d:'Frühstücke heute draussen — Balkon, Garten, Park, egal wo.',diff:'easy',cat:'Natur',e:'☕'},
+      {t:'Beobachte Vögel',d:'Setz dich draussen hin und beobachte 15 Minuten lang nur Vögel.',diff:'easy',cat:'Natur',e:'🐦'},
+      {t:'Mach Frühlingsrollen selbst',d:'Bereite frische Frühlingsrollen mit saisonalem Gemüse zu.',diff:'medium',cat:'Kochen',e:'🥢'},
     ]
   },
   {
-    name: 'Sommer',
-    emoji: '☀️',
-    start: [6, 21], end: [9, 22],
-    color: '#f39c12',
+    name: 'Sommer', emoji: '☀️',
+    start: [6, 21], end: [9, 22], color: '#f39c12',
     quests: [
       {t:'Spring in einen See',d:'Such dir einen See und spring rein — kein Zögern, kein "das Wasser ist zu kalt".',diff:'medium',cat:'Abenteuer',e:'🏊'},
       {t:'Grilliere mit Freunden',d:'Organisiere ein Grillfest — du kümmerst dich um alles.',diff:'medium',cat:'Sozial',e:'🔥'},
       {t:'Schau den Sonnenuntergang an',d:'Such dir einen schönen Aussichtspunkt und schau bewusst zu wie die Sonne untergeht.',diff:'easy',cat:'Natur',e:'🌅'},
       {t:'Mach eine Velotour',d:'Mindestens 20km am Stück — such dir eine schöne Route.',diff:'medium',cat:'Sport',e:'🚴'},
+      {t:'Schlaf draussen',d:'Schlaf diese Nacht im Garten, auf dem Balkon oder im Wald unter dem Sternenhimmel.',diff:'hard',cat:'Abenteuer',e:'⛺'},
+      {t:'Kanu oder SUP fahren',d:'Miete ein Kanu oder SUP-Board und fahr mindestens eine Stunde.',diff:'medium',cat:'Sport',e:'🛶'},
+      {t:'Sonnenaufgang beobachten',d:'Steh früh auf und schau dir den Sonnenaufgang an einem schönen Ort an.',diff:'medium',cat:'Natur',e:'🌄'},
+      {t:'Mach ein Sommerfest',d:'Lade Freunde ein — draussen, mit Musik, Essen und Trinken.',diff:'hard',cat:'Sozial',e:'🎉'},
+      {t:'Bade im Fluss',d:'Such dir eine schöne Flussstelle und schwimm darin.',diff:'medium',cat:'Abenteuer',e:'🏖️'},
+      {t:'Mach Glacé selbst',d:'Bereite selbstgemachtes Glacé zu — mit frischen Früchten.',diff:'easy',cat:'Kochen',e:'🍦'},
     ]
   },
   {
-    name: 'Halloween',
-    emoji: '🎃',
-    start: [10, 28], end: [10, 31],
-    color: '#e67e22',
+    name: 'Herbst', emoji: '🍂',
+    start: [9, 23], end: [11, 30], color: '#d35400',
+    quests: [
+      {t:'Sammel Kastanien oder Pilze',d:'Geh in den Wald und sammel Kastanien, Pilze oder Herbstblätter.',diff:'easy',cat:'Natur',e:'🍄'},
+      {t:'Back einen Kürbiskuchen',d:'Kauf einen Kürbis und back einen Kuchen oder Suppe damit.',diff:'medium',cat:'Kochen',e:'🎃'},
+      {t:'Mach einen Herbstspaziergang',d:'Geh durch den Wald und genieesse das Farbenspiel — nimm Fotos auf.',diff:'easy',cat:'Natur',e:'🍁'},
+      {t:'Lies ein Buch mit Tee',d:'Mach dir einen Tee, wickle dich in eine Decke und lies mindestens eine Stunde.',diff:'easy',cat:'Lesen',e:'📚'},
+      {t:'Mach Quittengelee oder Apfelmus',d:'Kauf saisonale Früchte und koche etwas daraus.',diff:'medium',cat:'Kochen',e:'🍎'},
+      {t:'Zünde Kerzen an',d:'Abend ohne Strom — nur Kerzen, kein Handy, einfach gemütlich sein.',diff:'easy',cat:'Selbstreflexion',e:'🕯️'},
+      {t:'Schnitz einen Kürbis',d:'Kauf einen Kürbis und schnitz ein Gesicht — mit Kerze drin.',diff:'easy',cat:'Kreativ',e:'🎃'},
+      {t:'Mach eine Herbstwanderung',d:'Mindestens 10km durch herbstliche Landschaft wandern.',diff:'medium',cat:'Sport',e:'🥾'},
+    ]
+  },
+  {
+    name: 'Winter', emoji: '❄️',
+    start: [12, 1], end: [3, 19], color: '#2980b9',
+    quests: [
+      {t:'Bau einen Schneemann',d:'Wenn Schnee liegt — raus und einen richtigen Schneemann bauen.',diff:'easy',cat:'Abenteuer',e:'⛄'},
+      {t:'Geh Schlitteln',d:'Such dir einen Hang und geh mit dem Schlitten runter.',diff:'easy',cat:'Sport',e:'🛷'},
+      {t:'Mach eine heisse Schokolade von Grund auf',d:'Nicht aus dem Pulver — echte Schokolade schmelzen, Milch aufschäumen.',diff:'easy',cat:'Kochen',e:'☕'},
+      {t:'Mach einen Winterspaziergang',d:'Geh bei kaltem Wetter raus — warm einpacken, mindestens 30 Minuten.',diff:'easy',cat:'Natur',e:'🧣'},
+      {t:'Geh Skifahren oder Snowboarden',d:'Einen Tag auf der Piste — auch wenn du nicht gut bist.',diff:'hard',cat:'Sport',e:'⛷️'},
+      {t:'Mach Fondue',d:'Koch ein richtiges Käsefondue mit Brot, Wein und guter Gesellschaft.',diff:'medium',cat:'Kochen',e:'🫕'},
+      {t:'Lies bei Kerzenschein',d:'Abend ohne Bildschirm — nur Kerzen und ein Buch.',diff:'easy',cat:'Lesen',e:'📖'},
+    ]
+  },
+  {
+    name: 'Halloween', emoji: '🎃',
+    start: [10, 28], end: [10, 31], color: '#e67e22',
     quests: [
       {t:'Schau einen Horrorfilm',d:'Einen echten — nicht "ein bisschen gruselig". Alleine oder mit jemandem.',diff:'easy',cat:'Abenteuer',e:'👻'},
       {t:'Schnitz einen Kürbis',d:'Kauf einen Kürbis und schnitz ein Gesicht rein. Mit Kerze drin.',diff:'easy',cat:'Kreativ',e:'🎃'},
       {t:'Verkleid dich',d:'Heute gehst du verkleidet raus — irgendwohin, egal wo.',diff:'medium',cat:'Abenteuer',e:'🦇'},
+      {t:'Mach Grusel-Snacks',d:'Back oder bereite Halloween-Snacks zu — Spinnenweb-Cupcakes oder Mumien-Würste.',diff:'medium',cat:'Kochen',e:'🕷️'},
     ]
   },
 ];
 
-function getCurrentSeasonalEvent() {
+function renderSeasonalQuests() {
+  const event = getCurrentSeasonalEvent();
+  const box = el('seasonalQuestBox');
+  const list = el('seasonalQuestList');
+  if (!box || !list) return;
+  if (!event) { box.style.display = 'none'; return; }
+
+  box.style.display = 'block';
+  list.innerHTML = `
+    <div style="font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:${event.color};margin-bottom:10px">
+      ${event.emoji} ${event.name.toUpperCase()} QUESTS
+    </div>
+    ${event.quests.map((q,i) => {
+      const pts = DIFF_PTS[q.diff];
+      const doneKey = `sq_seasonal_${event.name}_${i}`;
+      const done = localStorage.getItem(doneKey) === todayKey();
+      return `<div style="background:var(--surface);border:1px solid ${done?'var(--border)':''+event.color+'44'};border-radius:16px;overflow:hidden;margin-bottom:10px;opacity:${done?'0.5':'1'}">
+        <div style="padding:14px 16px 12px;display:flex;gap:12px;align-items:flex-start">
+          <div style="font-size:1.4rem">${q.e}</div>
+          <div style="flex:1">
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;flex-wrap:wrap">
+              <span class="diff-badge diff-${q.diff}">${DIFF_DE[q.diff]}</span>
+              <span class="pts-inline pts-${q.diff}">+${pts} Pts</span>
+            </div>
+            <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.95rem;margin-bottom:3px">${q.t}</div>
+            <div style="font-size:0.75rem;color:var(--muted);line-height:1.5">${q.d}</div>
+          </div>
+        </div>
+        ${done ? `<div style="padding:8px 16px;font-size:0.75rem;color:var(--muted);border-top:1px solid var(--border)">✅ Heute erledigt</div>` :
+        `<div style="display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--border)">
+          <button class="action-btn btn-done" onclick="completeSeasonalQuest(${i},'${event.name}')" style="border-right:1px solid var(--border)">✅ Erledigt</button>
+          <button class="action-btn" onclick="skipSeasonalQuest()" style="color:var(--muted)">⏭ Skip</button>
+        </div>`}
+      </div>`;
+    }).join('')}
+  `;
+}
+
+window.completeSeasonalQuest = function(index, eventName) {
+  const event = SEASONAL_EVENTS.find(e => e.name === eventName);
+  if (!event) return;
+  const q = event.quests[index];
+  const pts = DIFF_PTS[q.diff];
+  score += pts;
+  saveLocalProgress();
+  updateMainUI();
+  localStorage.setItem(`sq_seasonal_${eventName}_${index}`, todayKey());
+  renderSeasonalQuests();
+  // Save to Firestore
+  addDoc(collection(db,'completions'), {
+    userId: currentUser.uid,
+    userName: currentUser.displayName||'Anonym',
+    groupId, questTitle: q.t, questEmoji: q.e, questDiff: q.diff,
+    pts, notes: null, photoUrl: null, date: todayKey(), createdAt: serverTimestamp()
+  }).catch(()=>{});
+  updateDoc(doc(db,'users',currentUser.uid), { score: increment(pts) }).catch(()=>{});
+  showToast(`${event.emoji} +${pts} Punkte!`, 2000);
+};
+
+window.skipSeasonalQuest = function() {
+  showToast('Quest übersprungen');
+};
   const now = new Date();
   const m = now.getMonth() + 1;
   const d = now.getDate();
@@ -477,6 +571,7 @@ function initMain() {
   listenForChallengeBadge();
   loadWeekQuest();
   checkDuellNotifications();
+  renderSeasonalQuests();
   setTimeout(() => { try { cleanupOldFeedEntries(); } catch(e) {} }, 2000);
   initPushNotifications();
   scheduleMidnightCleanup();
@@ -3418,6 +3513,11 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 
       <div class="quest-list" id="questList" style="margin-top:10px">
         <div class="quest-placeholder"><span style="font-size:2rem;display:block;margin-bottom:8px">✨</span>Drück den Knopf — 5 Abenteuer warten!</div>
+      </div>
+
+      <!-- SEASONAL QUESTS BOX -->
+      <div id="seasonalQuestBox" style="display:none;margin-top:14px">
+        <div id="seasonalQuestList"></div>
       </div>
     </div>
 
