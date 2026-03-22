@@ -57,6 +57,16 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/fireba
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, query, where, orderBy, onSnapshot, getDocs, deleteDoc, serverTimestamp, increment } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
+// Check invite link immediately
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  const joinCode = params.get('join');
+  if (joinCode) {
+    localStorage.setItem('sq_pending_join', joinCode.toUpperCase());
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+})();
+
 const firebaseConfig = {
   apiKey: "AIzaSyBUiQ-p46Y_TykhjhHZL6sgfMhEURmV1hU",
   authDomain: "sideqest-a6c82.firebaseapp.com",
@@ -159,6 +169,12 @@ onAuthStateChanged(auth, async user => {
         level: 0,
         createdAt: serverTimestamp()
       });
+    }
+    // Check for pending invite join first
+    const pendingJoin = localStorage.getItem('sq_pending_join');
+    if (pendingJoin) {
+      await processPendingJoin();
+      return;
     }
     const gid = localStorage.getItem('sq_groupId');
     // Check for invite link ?join=CODE
@@ -1214,6 +1230,59 @@ window.confirmComplete = async function() {
     showToast('Fehler: ' + e.message);
   }
 };
+
+// ── INVITE LINK ──
+window.shareInviteLink = function() {
+  const code = el('groupCodeDisplay').textContent;
+  const name = el('groupNameDisplay').textContent;
+  const url = `https://lion391.github.io/sidequests/?join=${code}`;
+  const text = `Tritt meiner SideQuest-Gruppe "${name}" bei! ⚡\n${url}`;
+
+  if (navigator.share) {
+    navigator.share({ title: 'SideQuest Einladung', text, url })
+      .catch(() => copyInviteLink(url));
+  } else {
+    copyInviteLink(url);
+  }
+};
+
+function copyInviteLink(url) {
+  navigator.clipboard?.writeText(url)
+    .then(() => showToast('🔗 Einladungslink kopiert!'))
+    .catch(() => showToast('Link: ' + url));
+}
+
+// Auto-join from invite link on page load
+function checkInviteLink() {
+  const params = new URLSearchParams(window.location.search);
+  const joinCode = params.get('join');
+  if (joinCode) {
+    // Store for after login
+    localStorage.setItem('sq_pending_join', joinCode.toUpperCase());
+    // Clean URL without reload
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+}
+
+async function processPendingJoin() {
+  const code = localStorage.getItem('sq_pending_join');
+  if (!code || !currentUser) return;
+  localStorage.removeItem('sq_pending_join');
+  try {
+    const q = query(collection(db,'groups'), where('code','==',code));
+    const snap = await getDocs(q);
+    if (snap.empty) return showToast('Gruppe nicht gefunden');
+    const gDoc = snap.docs[0];
+    groupId = gDoc.id;
+    const members = gDoc.data().members || [];
+    if (!members.includes(currentUser.uid)) {
+      await updateDoc(doc(db,'groups',groupId), { members: [...members, currentUser.uid] });
+    }
+    localStorage.setItem('sq_groupId', groupId);
+    showToast(`✅ Gruppe "${gDoc.data().name}" beigetreten!`);
+    await loadGroup();
+  } catch(e) { showToast('Fehler beim Beitreten'); }
+}
 
 // ── SYNC SCORE FROM FIRESTORE ──
 async function syncScoreFromFirestore() {
