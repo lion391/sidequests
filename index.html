@@ -3665,25 +3665,25 @@ window.shareInviteLink = function() {
 window.debugOneSignal = async function() {
   let msg = '🔔 OneSignal Debug:\n\n';
   try {
-    // Check if SDK loaded
     msg += window.OneSignal ? '✅ SDK geladen\n' : '❌ SDK NICHT geladen\n';
-
     if (window.OneSignal) {
-      // Check permission
       const perm = window.OneSignal.Notifications.permission;
       msg += perm ? '✅ Berechtigung erteilt\n' : '❌ Keine Berechtigung\n';
-
-      // Check subscription
       const sub = window.OneSignal.User.PushSubscription;
-      const id = sub?.id;
-      msg += id ? `✅ Player ID: ${id.substring(0,8)}...\n` : '❌ Keine Player ID\n';
       const optedIn = sub?.optedIn;
       msg += optedIn ? '✅ Opted In\n' : '❌ Nicht Opted In\n';
 
-      // Try to save if we have ID
+      // Retry getting ID up to 5 times
+      let id = sub?.id;
+      for (let i = 0; i < 5 && !id; i++) {
+        await new Promise(r => setTimeout(r, 1000));
+        id = window.OneSignal.User.PushSubscription.id;
+      }
+      msg += id ? `✅ Player ID: ${id.substring(0,8)}...\n` : '❌ Keine Player ID nach 5 Versuchen\n';
+
       if (id && currentUser) {
         await updateDoc(doc(db,'users',currentUser.uid), { osPlayerId: id });
-        msg += '✅ Player ID in Firestore gespeichert!\n';
+        msg += '✅ In Firestore gespeichert!\n';
       }
     }
   } catch(e) {
@@ -4810,10 +4810,15 @@ async function initPushNotifications() {
     }
 
     // Wait a moment for subscription to be ready
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 2000));
 
-    // Get player ID and save to Firestore
-    const playerId = window.OneSignal.User.PushSubscription.id;
+    // Get player ID with retry
+    let playerId = null;
+    for (let i = 0; i < 10 && !playerId; i++) {
+      playerId = window.OneSignal.User.PushSubscription.id;
+      if (!playerId) await new Promise(r => setTimeout(r, 1000));
+    }
+
     if (playerId && currentUser) {
       await updateDoc(doc(db,'users',currentUser.uid), { osPlayerId: playerId }).catch(()=>{});
       console.log('OneSignal player ID saved:', playerId);
