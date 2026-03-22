@@ -452,47 +452,77 @@ function renderSeasonalQuests() {
 
   if (activeEvents.length === 0) { box.style.display = 'none'; return; }
   box.style.display = 'block';
+  list.innerHTML = '';
 
-  list.innerHTML = activeEvents.map(event => {
+  activeEvents.forEach(event => {
     const id = 'seasonal_' + event.name.replace(/\s/g,'');
-    const completedCount = event.quests.filter((_,i) => localStorage.getItem('sq_seasonal_'+event.name+'_'+i) === todayKey()).length;
-    return '<div style="background:var(--surface);border:2px solid '+event.color+'55;border-radius:16px;margin-bottom:10px;overflow:hidden">' +
-      '<button onclick="toggleSeasonAccordion(''+id+'')" style="width:100%;padding:14px 16px;background:'+event.color+'11;border:none;display:flex;align-items:center;justify-content:space-between;cursor:pointer">' +
-        '<span style="display:flex;align-items:center;gap:10px">' +
-          '<span style="font-size:1.5rem">'+event.emoji+'</span>' +
-          '<span>' +
-            '<div style="font-family:'Syne',sans-serif;font-weight:800;font-size:0.9rem;color:'+event.color+';text-align:left">'+event.name+'</div>' +
-            '<div style="font-size:0.68rem;color:var(--muted);text-align:left">'+completedCount+'/'+event.quests.length+' erledigt</div>' +
-          '</span>' +
-        '</span>' +
-        '<span id="'+id+'_chevron" style="font-size:0.8rem;color:var(--muted)">▼</span>' +
-      '</button>' +
-      '<div id="'+id+'" style="display:none;border-top:1px solid '+event.color+'33">' +
-        event.quests.map((q,i) => {
-          const pts = q.pts || DIFF_PTS[q.diff];
-          const doneKey = 'sq_seasonal_'+event.name+'_'+i;
-          const done = localStorage.getItem(doneKey) === todayKey();
-          return '<div style="padding:14px 16px;border-bottom:1px solid var(--border);opacity:'+(done?'0.5':'1')+'">' +
-            '<div style="display:flex;gap:10px;align-items:flex-start">' +
-              '<div style="font-size:1.3rem">'+q.e+'</div>' +
-              '<div style="flex:1">' +
-                '<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;flex-wrap:wrap">' +
-                  '<span class="diff-badge diff-'+q.diff+'">'+DIFF_DE[q.diff]+'</span>' +
-                  '<span class="pts-inline pts-'+q.diff+'">+'+pts+' Pts</span>' +
-                '</div>' +
-                '<div style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.9rem;margin-bottom:3px">'+q.t+'</div>' +
-                '<div style="font-size:0.72rem;color:var(--muted);line-height:1.5">'+q.d+'</div>' +
-              '</div>' +
-            '</div>' +
-            (done
-              ? '<div style="margin-top:8px;font-size:0.72rem;color:var(--muted)">✅ Heute erledigt</div>'
-              : '<button onclick="completeSeasonalQuest('+i+',''+event.name+'')" style="width:100%;margin-top:10px;padding:9px;background:'+event.color+'22;color:'+event.color+';border:1px solid '+event.color+'66;border-radius:10px;font-family:'Syne',sans-serif;font-weight:700;font-size:0.78rem;cursor:pointer">✅ Erledigt! +'+pts+' Pts</button>'
-            ) +
-          '</div>';
-        }).join('') +
-      '</div>' +
-    '</div>';
-  }).join('');
+    const completedCount = event.quests.filter((_,i) =>
+      localStorage.getItem('sq_seasonal_' + event.name + '_' + i) === todayKey()
+    ).length;
+
+    // Build accordion wrapper
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'background:var(--surface);border:2px solid ' + event.color + '55;border-radius:16px;margin-bottom:10px;overflow:hidden';
+
+    // Header button
+    const header = document.createElement('button');
+    header.style.cssText = 'width:100%;padding:14px 16px;background:' + event.color + '11;border:none;display:flex;align-items:center;justify-content:space-between;cursor:pointer';
+    header.onclick = () => toggleSeasonAccordion(id);
+    header.innerHTML =
+      '<span style="display:flex;align-items:center;gap:10px">' +
+        '<span style="font-size:1.5rem">' + event.emoji + '<\/span>' +
+        '<span style="text-align:left">' +
+          '<div style="font-weight:800;font-size:0.9rem;color:' + event.color + '">' + event.name + '<\/div>' +
+          '<div style="font-size:0.68rem;color:var(--muted)">' + completedCount + '/' + event.quests.length + ' erledigt<\/div>' +
+        '<\/span>' +
+      '<\/span>' +
+      '<span id="' + id + '_chevron" style="font-size:0.8rem;color:var(--muted)">&#9660;<\/span>';
+
+    // Content
+    const contentDiv = document.createElement('div');
+    contentDiv.id = id;
+    contentDiv.style.cssText = 'display:none;border-top:1px solid ' + event.color + '33';
+
+    event.quests.forEach((q, i) => {
+      const pts = q.pts || DIFF_PTS[q.diff];
+      const done = localStorage.getItem('sq_seasonal_' + event.name + '_' + i) === todayKey();
+
+      const card = document.createElement('div');
+      card.style.cssText = 'padding:14px 16px;border-bottom:1px solid var(--border);opacity:' + (done ? '0.5' : '1');
+
+      const top = document.createElement('div');
+      top.style.cssText = 'display:flex;gap:10px;align-items:flex-start';
+      top.innerHTML =
+        '<div style="font-size:1.3rem">' + q.e + '<\/div>' +
+        '<div style="flex:1">' +
+          '<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;flex-wrap:wrap">' +
+            '<span class="diff-badge diff-' + q.diff + '">' + DIFF_DE[q.diff] + '<\/span>' +
+            '<span class="pts-inline pts-' + q.diff + '">+' + pts + ' Pts<\/span>' +
+          '<\/div>' +
+          '<div style="font-family:var(--font-syne,sans-serif);font-weight:700;font-size:0.9rem;margin-bottom:3px">' + q.t + '<\/div>' +
+          '<div style="font-size:0.72rem;color:var(--muted);line-height:1.5">' + q.d + '<\/div>' +
+        '<\/div>';
+      card.appendChild(top);
+
+      if (done) {
+        const doneDiv = document.createElement('div');
+        doneDiv.style.cssText = 'margin-top:8px;font-size:0.72rem;color:var(--muted)';
+        doneDiv.textContent = '✅ Heute erledigt';
+        card.appendChild(doneDiv);
+      } else {
+        const btn = document.createElement('button');
+        btn.style.cssText = 'width:100%;margin-top:10px;padding:9px;background:' + event.color + '22;color:' + event.color + ';border:1px solid ' + event.color + '66;border-radius:10px;font-weight:700;font-size:0.78rem;cursor:pointer';
+        btn.textContent = '✅ Erledigt! +' + pts + ' Pts';
+        btn.onclick = () => completeSeasonalQuest(i, event.name);
+        card.appendChild(btn);
+      }
+      contentDiv.appendChild(card);
+    });
+
+    wrapper.appendChild(header);
+    wrapper.appendChild(contentDiv);
+    list.appendChild(wrapper);
+  });
 }
 
 window.toggleSeasonAccordion = function(id) {
@@ -2016,6 +2046,15 @@ async function loadWeekQuest() {
   if(done) box.style.borderColor = 'var(--accent)';
 }
 
+window.toggleWeekQuestDesc = function() {
+  const details = el('weekQuestDetails');
+  const chevron = el('weekQuestChevron');
+  if (!details) return;
+  const open = details.style.display === 'none';
+  details.style.display = open ? 'block' : 'none';
+  if (chevron) chevron.textContent = open ? '▲' : '▼';
+};
+
 window.completeWeekQuest = async function() {
   const wq = getWeekQuestForGroup();
   if(localStorage.getItem(weekQuestKey()) === 'done') return;
@@ -3470,16 +3509,25 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 
     <!-- QUESTS TAB -->
     <div class="tab-content" id="tab-quests">
-      <div id="weekQuestBox" style="display:none;background:var(--surface);border:2px solid var(--wild);border-radius:18px;padding:16px;margin-bottom:14px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-          <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:0.8rem;color:var(--wild)">🌟 WOCHENQUEST</span>
-          <span style="font-size:0.7rem;color:var(--muted)" id="weekQuestDaysLeft"></span>
-        </div>
-        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;margin-bottom:4px" id="weekQuestTitle"></div>
-        <div style="font-size:0.75rem;color:var(--muted);line-height:1.5;margin-bottom:12px" id="weekQuestDesc"></div>
-        <div style="display:flex;align-items:center;justify-content:space-between">
-          <span style="font-family:'Syne',sans-serif;font-weight:800;color:var(--wild)" id="weekQuestPts"></span>
-          <button id="weekQuestBtn" class="btn-confirm" style="width:auto;padding:8px 16px;font-size:0.8rem" onclick="completeWeekQuest()">✅ Erledigt!</button>
+      <!-- SEASONAL QUESTS BOX (above week quest) -->
+      <div id="seasonalQuestBox" style="display:none;margin-bottom:14px">
+        <div id="seasonalQuestList"></div>
+      </div>
+
+      <div id="weekQuestBox" style="display:none;background:var(--surface);border:2px solid #c084fc;border-radius:18px;overflow:hidden;margin-bottom:14px">
+        <button onclick="toggleWeekQuestDesc()" style="width:100%;padding:14px 16px;background:#c084fc18;border:none;display:flex;align-items:center;justify-content:space-between;cursor:pointer;text-align:left">
+          <span>
+            <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:0.75rem;color:var(--wild);margin-bottom:4px">🌟 WOCHENQUEST · <span id="weekQuestDaysLeft"></span></div>
+            <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;color:var(--text)" id="weekQuestTitle"></div>
+          </span>
+          <span id="weekQuestChevron" style="font-size:0.8rem;color:var(--muted);flex-shrink:0;margin-left:10px">▼</span>
+        </button>
+        <div id="weekQuestDetails" style="display:none;padding:0 16px 14px;border-top:1px solid var(--border)">
+          <div style="font-size:0.75rem;color:var(--muted);line-height:1.5;margin:10px 0 12px" id="weekQuestDesc"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <span style="font-family:'Syne',sans-serif;font-weight:800;color:var(--wild)" id="weekQuestPts"></span>
+            <button id="weekQuestBtn" class="btn-confirm" style="width:auto;padding:8px 16px;font-size:0.8rem" onclick="completeWeekQuest()">✅ Erledigt!</button>
+          </div>
         </div>
       </div>
 
@@ -3517,10 +3565,6 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         <div class="quest-placeholder"><span style="font-size:2rem;display:block;margin-bottom:8px">✨</span>Drück den Knopf — 5 Abenteuer warten!</div>
       </div>
 
-      <!-- SEASONAL QUESTS BOX -->
-      <div id="seasonalQuestBox" style="display:none;margin-top:14px">
-        <div id="seasonalQuestList"></div>
-      </div>
     </div>
 
     <!-- FEED TAB -->
