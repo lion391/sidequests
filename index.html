@@ -374,7 +374,7 @@ const SEASONAL_EVENTS = [
       {t:'Mach einen Herbstputz',d:'Wie der Frühjahrsputz — die ganze Wohnung, Keller aufräumen, Winterkleider raussuchen, alles ordnen.',diff:'hard',cat:'Selbstreflexion',e:'🧹',pts:90},
       {t:'Sammel und verarbeite Pilze',d:'Geh Pilze sammeln, bestimme sie sicher und koch ein Gericht daraus. Nur Pilze die du kennst!',diff:'hard',cat:'Natur',e:'🍄',pts:120},
       {t:'Bau ein Insektenhotel oder Vogelhäuschen',d:'Selber bauen — aus Holz, Bambusröhren, Tannenzapfen. Richtiges Bastelprojekt.',diff:'medium',cat:'Natur',e:'🦔',pts:80},
-      {t:'Mach eine Fahrradtour durch den Herbstwald',d:'Mindestens 30km durch herbstliche Wälder — Laub, Nebel, Herbstfarben.',diff:'hard',cat:'Sport',e:'🚴',pts:90},
+      {t:'Mach eine Fahrradtour durch den Herbstwald',d:'Mindestens 30km durch herbstliche Wälder — Laub, Nebel, Herbstfarben.',diff:'hard',cat:'Sport',e:'🚴',pts:150},
       {t:'Koch ein Herbst-Festessen',d:'Kürbis, Pilze, Maroni, Wildgemüse — ein 3-Gänge-Menü aus Herbstzutaten.',diff:'hard',cat:'Kochen',e:'🎃',pts:100},
       {t:'Mach einen Tagesausflug in die Berge',d:'Mit öV oder Auto auf einen Berg — Wanderung, Seilbahn, Herbstluft geniessen. Mindestens 6h.',diff:'medium',cat:'Natur',e:'🏔️',pts:80},
     ]
@@ -816,16 +816,16 @@ const ALL_QUESTS = [
   // ═══════════════════════════════════════
 
   // Sport
-  {t:'Lauf 5km',d:'Draussen, am Stück — kein Laufband.',diff:'medium',cat:'Sport',e:'🏃'},
+  {t:'Lauf 5km',d:'Draussen, am Stück — kein Laufband.',diff:'medium',pts:50,cat:'Sport',e:'🏃'},
   {t:'Mach 45 Minuten Sport',d:'Richtig schwitzen — Gym, Schwimmen, Velo, egal.',diff:'medium',cat:'Sport',e:'💪'},
   {t:'Spiel ein Mannschaftssport',d:'Fussball, Volleyball, Basketball — mit anderen.',diff:'medium',cat:'Sport',e:'⚽'},
   {t:'Geh eine Stunde Velo fahren',d:'Nicht zur Arbeit — als Ausflug, ohne festes Ziel.',diff:'medium',cat:'Sport',e:'🚴'},
   {t:'Mach eine Stunde Yoga',d:'Richtige Session, kein 10-Minuten-Video.',diff:'medium',cat:'Sport',e:'🧘'},
   {t:'Geh klettern',d:'Kletterhalle oder draussen — mindestens 1 Stunde.',diff:'medium',cat:'Sport',e:'🧗'},
   {t:'Mach ein HIIT-Training',d:'20 Minuten intensiv — kein Pause-Schummeln.',diff:'medium',cat:'Sport',e:'🔥'},
-  {t:'Geh 10km wandern',d:'Mit Rucksack und Proviant.',diff:'medium',cat:'Sport',e:'🥾'},
+  {t:'Geh 10km wandern',d:'Mit Rucksack und Proviant.',diff:'medium',pts:80,cat:'Sport',e:'🥾'},
   {t:'Geh Inline Skaten',d:'Mindestens 45 Minuten am Stück.',diff:'medium',cat:'Sport',e:'🛼'},
-  {t:'Schwimm 1km',d:'Im See, Freibad oder Hallenbad.',diff:'medium',cat:'Sport',e:'🏊'},
+  {t:'Schwimm 1km',d:'Im See, Freibad oder Hallenbad.',diff:'medium',pts:40,cat:'Sport',e:'🏊'},
   {t:'Geh Tischtennis spielen',d:'Mindestens 30 Minuten gegen jemanden.',diff:'medium',cat:'Sport',e:'🏓'},
 
   // Sozial
@@ -865,7 +865,7 @@ const ALL_QUESTS = [
   {t:'Probier ein neues Restaurant',d:'Eines das du noch nie besucht hast.',diff:'medium',cat:'Essen',e:'🍜'},
   {t:'Besuch einen Ort den du schon immer wolltest',d:'In deiner Stadt oder Region — heute gehst du wirklich hin.',diff:'medium',cat:'Abenteuer',e:'📍'},
   {t:'Geh in eine Ausstellung',d:'Kunst, Fotografie, Geschichte — etwas das dich interessiert.',diff:'medium',cat:'Abenteuer',e:'🖼️'},
-  {t:'Mach eine Velotour mit Freunden',d:'Mindestens 15km, mit mindestens einer Person.',diff:'medium',cat:'Abenteuer',e:'🚴'},
+  {t:'Mach eine Velotour mit Freunden',d:'Mindestens 15km, mit mindestens einer Person.',diff:'medium',cat:'Abenteuer',e:'🚴',pts:75},
 
   // Gesundheit / Kochen
   {t:'Koch ein Gericht aus einem anderen Land',d:'Rezept raussuchen, Zutaten holen, alles selbst machen.',diff:'medium',cat:'Kochen',e:'🌍'},
@@ -879,9 +879,9 @@ const ALL_QUESTS = [
   // 🔴 HARD (50 Pts)
   // ═══════════════════════════════════════
 
-  {t:'Lauf 10km',d:'Draussen, am Stück, keine Pausen.',diff:'hard',cat:'Sport',e:'🏃'},
+  {t:'Lauf 10km',d:'Draussen, am Stück, keine Pausen.',diff:'hard',pts:100,cat:'Sport',e:'🏃'},
   {t:'Mach eine 2-Stunden-Wanderung',d:'Mit Rucksack, draussen, kein Stadtspaziergang.',diff:'hard',cat:'Sport',e:'🥾'},
-  {t:'Geh 2 Stunden Velo fahren',d:'Mindestens 30km, draussen.',diff:'hard',cat:'Sport',e:'🚴'},
+  {t:'Geh 2 Stunden Velo fahren',d:'Mindestens 30km, draussen.',diff:'hard',pts:150,cat:'Sport',e:'🚴'},
   {t:'Mach eine Stunde Krafttraining',d:'Richtig — nicht nur ein bisschen Hanteln.',diff:'hard',cat:'Sport',e:'🏋️'},
   {t:'Geh heute ohne Handy aus dem Haus',d:'Den ganzen Ausflug — mindestens 3 Stunden.',diff:'hard',cat:'Selbstreflexion',e:'📵'},
   {t:'Räum deine ganze Wohnung auf',d:'Alles — nicht nur das Sichtbare.',diff:'hard',cat:'Selbstreflexion',e:'🧹'},
@@ -891,7 +891,7 @@ const ALL_QUESTS = [
   {t:'Organisiere einen Ausflug für die Gruppe',d:'Du planst alles — Ort, Zeit, Aktivität.',diff:'hard',cat:'Sozial',e:'🗺️'},
   {t:'Mach 24 Stunden kein Social Media',d:'Alles deinstallieren oder ausloggen.',diff:'hard',cat:'Selbstreflexion',e:'📵'},
   {t:'Koch ein 3-Gänge-Menü',d:'Vorspeise, Hauptgang, Dessert — alles selbst.',diff:'hard',cat:'Kochen',e:'🍽️'},
-  {t:'Lauf einen Halbmarathon',d:'21km. Kein Pause-Schummeln.',diff:'hard',cat:'Sport',e:'🏅'},
+  {t:'Lauf einen Halbmarathon',d:'21km. Kein Pause-Schummeln.',diff:'hard',pts:210,cat:'Sport',e:'🏅'},
   {t:'Mach einen ganzen Tag ohne Koffein',d:'Kein Kaffee, kein Energydrink, kein Schwarztee.',diff:'hard',cat:'Gesundheit',e:'☕'},
   {t:'Lies ein ganzes Buch',d:'An einem oder zwei Tagen — mindestens 200 Seiten.',diff:'hard',cat:'Lesen',e:'📖'},
   {t:'Mach heute früh auf und abends früh schlafen',d:'Vor 7 Uhr auf, vor 22 Uhr im Bett.',diff:'hard',cat:'Gesundheit',e:'⏰'},
@@ -1004,9 +1004,9 @@ const ALL_QUESTS = [
   // ═══════════════════════════════════════
   // 🔴 HARD — NEUE QUESTS
   // ═══════════════════════════════════════
-  {t:'Lauf 15km',d:'Am Stück, draussen, kein Laufband.',diff:'hard',cat:'Sport',e:'🏃'},
+  {t:'Lauf 15km',d:'Am Stück, draussen, kein Laufband.',diff:'hard',pts:150,cat:'Sport',e:'🏃'},
   {t:'Mach eine 4-Stunden-Wanderung',d:'Mit Karte, Rucksack, echtes Terrain.',diff:'hard',cat:'Sport',e:'🥾'},
-  {t:'Schwimm 2km',d:'Im See oder Hallenbad — am Stück.',diff:'hard',cat:'Sport',e:'🏊'},
+  {t:'Schwimm 2km',d:'Im See oder Hallenbad — am Stück.',diff:'hard',pts:80,cat:'Sport',e:'🏊'},
   {t:'Mach 500 Kniebeugen an einem Tag',d:'In beliebigen Sets — aber alle heute.',diff:'hard',cat:'Sport',e:'🦵'},
   {t:'Geh 3 Tage ohne Social Media',d:'Alle Apps deinstallieren — nicht nur ausloggen.',diff:'hard',cat:'Selbstreflexion',e:'📵'},
   {t:'Schreib 5 echte Briefe und schick sie ab',d:'Handgeschrieben, an 5 verschiedene Menschen.',diff:'hard',cat:'Sozial',e:'✉️'},
@@ -1029,7 +1029,7 @@ const ALL_QUESTS = [
   {t:'Setz dich in einen Zug ohne Ziel',d:'Einsteigen, irgendwo aussteigen, erkunden, zurückfinden.',diff:'wild',cat:'Abenteuer',e:'🚆'},
   {t:'Mach 24h kein Fleisch, keinen Zucker, keinen Alkohol',d:'Einen Tag wirklich clean essen.',diff:'wild',cat:'Gesundheit',e:'💪'},
   {t:'Bau etwas aus Holz',d:'Ein echtes Projekt — Regal, Box, Hocker — etwas das stehen bleibt.',diff:'wild',cat:'Kreativ',e:'🪵'},
-  {t:'Lauf einen Marathon',d:'42km. Du weisst was zu tun ist.',diff:'wild',cat:'Sport',e:'🏅'},
+  {t:'Lauf einen Marathon',d:'42km. Du weisst was zu tun ist.',diff:'wild',pts:420,cat:'Sport',e:'🏅'},
   {t:'Überzeuge jemanden etwas Positives zu ändern',d:'Nicht mit Druck — wirklich überzeugen, mit Geduld.',diff:'wild',cat:'Sozial',e:'🗣️'},
   {t:'Mach eine Woche ohne Alkohol',d:'7 Tage clean. Fang heute an.',diff:'wild',cat:'Gesundheit',e:'🚫'},
 ];
@@ -1037,7 +1037,7 @@ const ALL_QUESTS = [
 
 // ── QUEST LOGIC ──
 const DIFF_DE = {easy:'Leicht',medium:'Mittel',hard:'Schwer',wild:'Wild 🔥'};
-const DIFF_PTS = {easy:10,medium:25,hard:50,wild:75};
+const DIFF_PTS = {easy:15,medium:40,hard:80,wild:120};
 
 function shuffle(arr) {
   const a=[...arr];
@@ -3224,7 +3224,7 @@ const INFO_CONTENT = {
       <b style="color:var(--text)">🏅 Monatspreis</b><br>
       "+ Preis vorschlagen" — alle stimmen ab, Mehrheit gewinnt. Auch im Feed abstimmbar.<br><br>
       <b style="color:var(--text)">Punkte</b><br>
-      🟢 Leicht +10 · 🟡 Mittel +25 · 🔴 Schwer +50 · 🔥 Wild +75 · 🌟 Wochenquest bis +200 · 🏃 Fitness +10/km`
+      🟢 Leicht +15 · 🟡 Mittel +40 · 🔴 Schwer +80 · 🔥 Wild +120 · 🌟 Wochenquest bis +200 · 🏃 Fitness +10/km`
   },
   fitness: {
     title: '🏃 Fitness — Wie es funktioniert',
@@ -4072,10 +4072,10 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 
     <div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px">Schwierigkeit:</div>
     <div style="display:flex;gap:8px;margin-bottom:14px" id="cqDiffBtns">
-      <button class="ai-cat-btn" onclick="selectCqDiff('easy',this)">🟢 Leicht<br><span style="font-size:0.65rem">+10 Pts</span></button>
-      <button class="ai-cat-btn" onclick="selectCqDiff('medium',this)">🟡 Mittel<br><span style="font-size:0.65rem">+25 Pts</span></button>
-      <button class="ai-cat-btn" onclick="selectCqDiff('hard',this)">🔴 Schwer<br><span style="font-size:0.65rem">+50 Pts</span></button>
-      <button class="ai-cat-btn" onclick="selectCqDiff('wild',this)">🔥 Wild<br><span style="font-size:0.65rem">+75 Pts</span></button>
+      <button class="ai-cat-btn" onclick="selectCqDiff('easy',this)">🟢 Leicht<br><span style="font-size:0.65rem">+15 Pts</span></button>
+      <button class="ai-cat-btn" onclick="selectCqDiff('medium',this)">🟡 Mittel<br><span style="font-size:0.65rem">+40 Pts</span></button>
+      <button class="ai-cat-btn" onclick="selectCqDiff('hard',this)">🔴 Schwer<br><span style="font-size:0.65rem">+80 Pts</span></button>
+      <button class="ai-cat-btn" onclick="selectCqDiff('wild',this)">🔥 Wild<br><span style="font-size:0.65rem">+120 Pts</span></button>
     </div>
 
     <div style="font-size:0.78rem;color:var(--muted);margin-bottom:6px">Kategorie & Emoji:</div>
@@ -4152,10 +4152,10 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 
     <div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px">Schwierigkeit:</div>
     <div style="display:flex;gap:8px;margin-bottom:14px" id="cqDiffBtns">
-      <button class="ai-cat-btn" onclick="selectCqDiff('easy',this)">🟢 Leicht<br><span style="font-size:0.65rem">+10 Pts</span></button>
-      <button class="ai-cat-btn" onclick="selectCqDiff('medium',this)">🟡 Mittel<br><span style="font-size:0.65rem">+25 Pts</span></button>
-      <button class="ai-cat-btn" onclick="selectCqDiff('hard',this)">🔴 Schwer<br><span style="font-size:0.65rem">+50 Pts</span></button>
-      <button class="ai-cat-btn" onclick="selectCqDiff('wild',this)">🔥 Wild<br><span style="font-size:0.65rem">+75 Pts</span></button>
+      <button class="ai-cat-btn" onclick="selectCqDiff('easy',this)">🟢 Leicht<br><span style="font-size:0.65rem">+15 Pts</span></button>
+      <button class="ai-cat-btn" onclick="selectCqDiff('medium',this)">🟡 Mittel<br><span style="font-size:0.65rem">+40 Pts</span></button>
+      <button class="ai-cat-btn" onclick="selectCqDiff('hard',this)">🔴 Schwer<br><span style="font-size:0.65rem">+80 Pts</span></button>
+      <button class="ai-cat-btn" onclick="selectCqDiff('wild',this)">🔥 Wild<br><span style="font-size:0.65rem">+120 Pts</span></button>
     </div>
 
     <div style="font-size:0.78rem;color:var(--muted);margin-bottom:6px">Kategorie & Emoji:</div>
