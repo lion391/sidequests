@@ -1603,8 +1603,8 @@ async function syncScoreFromFirestore() {
     const uDoc = await getDoc(doc(db, 'users', currentUser.uid));
     if (!uDoc.exists()) return;
     const firestoreScore = uDoc.data().score || 0;
-    // Only sync if Firestore score is higher — never override a manual reset
-    if (firestoreScore > score) {
+    // Firestore is always source of truth — overwrite local
+    if (firestoreScore !== score) {
       score = firestoreScore;
       saveLocalProgress();
       updateMainUI();
