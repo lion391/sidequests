@@ -1603,7 +1603,7 @@ async function syncScoreFromFirestore() {
     const uDoc = await getDoc(doc(db, 'users', currentUser.uid));
     if (!uDoc.exists()) return;
     const firestoreScore = uDoc.data().score || 0;
-    // Always use the higher value — Firestore is source of truth
+    // Only sync if Firestore score is higher — never override a manual reset
     if (firestoreScore > score) {
       score = firestoreScore;
       saveLocalProgress();
@@ -3769,7 +3769,16 @@ window.confirmResetPoints = function() {
 window.resetMyPoints = async function() {
   score = 0; completed = []; lastRound = []; activeQuests = [];
   saveLocalProgress();
-  try { await updateDoc(doc(db,'users',currentUser.uid), {score:0}); } catch(e) {}
+  try {
+    // Reset score in Firestore
+    await updateDoc(doc(db,'users',currentUser.uid), {score:0});
+    // Delete all completions so leaderboard also shows 0
+    const snap = await getDocs(query(collection(db,'completions'),
+      where('userId','==',currentUser.uid)));
+    for (const d of snap.docs) {
+      try { await deleteDoc(doc(db,'completions',d.id)); } catch(e) {}
+    }
+  } catch(e) {}
   el('confirmResetModal').style.display = 'none';
   updateMainUI();
   renderLocalHistory();
