@@ -3082,10 +3082,11 @@ async function loadFitnessTab() {
     where('userId','==',currentUser.uid));
   const allMySnap = await getDocs(allMyQ);
 
-  // Auto-delete runs older than 7 days
+  // Auto-delete runs older than 7 days — only if createdAt exists
   const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const toDelete = allMySnap.docs.filter(d => {
-    const secs = d.data().createdAt?.seconds || 0;
+    const secs = d.data().createdAt?.seconds;
+    if (!secs) return false; // never delete if no timestamp yet
     return secs * 1000 < sevenDaysAgo;
   });
   await Promise.all(toDelete.map(d => deleteDoc(doc(db,'fitness_runs',d.id))));
