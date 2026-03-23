@@ -16,8 +16,8 @@ messaging.onBackgroundMessage(payload => {
   const { title, body, icon } = payload.notification || {};
   self.registration.showNotification(title || 'SideQuest ⚡', {
     body: body || '',
-    icon: icon || 'https://lion391.github.io/sidequests/icon.png',
-    badge: 'https://lion391.github.io/sidequests/icon.png',
+    icon: icon || 'https://lion391.github.io/sidequests/sidequests_icon.png',
+    badge: 'https://lion391.github.io/sidequests/sidequests_badge.png',
     vibrate: [200, 100, 200],
     tag: 'sidequests',
     data: { url: 'https://lion391.github.io/sidequests/', ...payload.data }
