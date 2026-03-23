@@ -98,7 +98,12 @@ async function registerFCMToken() {
 
     if (token && currentUser) {
       await updateDoc(doc(db,'users',currentUser.uid), { fcmToken: token });
-      console.log('[SQ] FCM Token registriert ✅');
+      // Also save to shared collection for broadcast notifications
+      await setDoc(doc(db,'fcm_tokens',currentUser.uid), {
+        token,
+        updatedAt: serverTimestamp()
+      });
+      console.log('[SQ] FCM Token registriert ✅', token.substring(0,20)+'...');
     }
   } catch(e) {
     console.log('[SQ] FCM Token Fehler:', e.message);
