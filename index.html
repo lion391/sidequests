@@ -1614,41 +1614,53 @@ async function syncScoreFromFirestore() {
 
 // ── FEED CLEANUP ──
 async function cleanupOldFeedEntries() {
-  if (!groupId || !currentUser) return;
-  try {
-    const today = todayKey();
-    const q = query(collection(db,'completions'), where('groupId','==',groupId));
-    const snap = await getDocs(q);
-    const toDelete = snap.docs.filter(d => {
-      const date = d.data().date || '';
-      return date !== today;
-    });
-    if (toDelete.length === 0) return;
-    let deleted = 0;
-    for (const d of toDelete) {
-      try {
-        await deleteDoc(doc(db,'completions',d.id));
-        deleted++;
-      } catch(e) {}
-    }
-    if (deleted > 0) showToast(`🗑️ ${deleted} alte Feed-Einträge gelöscht`);
-  } catch(e) { showToast('Cleanup Fehler: ' + e.message); }
+  // WICHTIG: completions werden NICHT gelöscht — sie speichern die Monatspunkte!
+  // Der Feed zeigt automatisch nur heutige Einträge (where 'date' == today).
+  // Nichts zu tun hier.
 }
 
 // Schedule cleanup exactly at midnight
 function scheduleMidnightCleanup() {
   const now = new Date();
   const midnight = new Date();
-  midnight.setHours(24, 0, 0, 0); // next midnight
+  midnight.setHours(24, 0, 0, 0);
   const msUntilMidnight = midnight - now;
 
   setTimeout(async () => {
     await cleanupOldFeedEntries();
-    if (el('tab-feed') && el('tab-feed').style.display !== 'none') {
-      loadFeed(); // refresh feed if open
+
+    // Check if it's the last day of the month — if so, delete all completions from this month
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const isLastDayOfMonth = tomorrow.getDate() === 1;
+    if (isLastDayOfMonth) {
+      await deleteOldMonthCompletions();
     }
-    scheduleMidnightCleanup(); // schedule next midnight
+
+    if (el('tab-feed') && el('tab-feed').style.display !== 'none') {
+      loadFeed();
+    }
+    scheduleMidnightCleanup();
   }, msUntilMidnight);
+}
+
+async function deleteOldMonthCompletions() {
+  if (!currentUser) return;
+  try {
+    const mk = monthKey();
+    // Delete all completions from this month across all groups
+    const q = query(collection(db,'completions'),
+      where('userId','==',currentUser.uid));
+    const snap = await getDocs(q);
+    const toDelete = snap.docs.filter(d => {
+      const date = d.data().date || '';
+      return date.startsWith(mk); // same month
+    });
+    for (const d of toDelete) {
+      try { await deleteDoc(doc(db,'completions',d.id)); } catch(e) {}
+    }
+    console.log(`[SQ] Monatsende: ${toDelete.length} Completions gelöscht`);
+  } catch(e) {}
 }
 window.openPhotoLightbox = function(src) {
   el('lightboxImg').src = src;
