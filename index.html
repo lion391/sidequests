@@ -1647,19 +1647,12 @@ function scheduleMidnightCleanup() {
 async function deleteOldMonthCompletions() {
   if (!currentUser) return;
   try {
-    const mk = monthKey();
-    // Delete all completions from this month across all groups
-    const q = query(collection(db,'completions'),
-      where('userId','==',currentUser.uid));
-    const snap = await getDocs(q);
-    const toDelete = snap.docs.filter(d => {
-      const date = d.data().date || '';
-      return date.startsWith(mk); // same month
-    });
-    for (const d of toDelete) {
-      try { await deleteDoc(doc(db,'completions',d.id)); } catch(e) {}
-    }
-    console.log(`[SQ] Monatsende: ${toDelete.length} Completions gelöscht`);
+    // Reset score to 0 at month end — completions stay for history
+    score = 0;
+    saveLocalProgress();
+    await updateDoc(doc(db,'users',currentUser.uid), {score:0});
+    updateMainUI();
+    console.log('[SQ] Monatsende: Score zurückgesetzt');
   } catch(e) {}
 }
 window.openPhotoLightbox = function(src) {
@@ -1921,21 +1914,15 @@ async function loadLeaderboard() {
 
   for(const uid of members){
     const uDoc=await getDoc(doc(db,'users',uid));
-    // Show member even if no users doc exists yet — fallback to uid
     const u = {uid, name: uDoc.exists() ? (uDoc.data().name||'Anonym') : 'Anonym', photo: uDoc.exists() ? (uDoc.data().photo||null) : null, ...(uDoc.exists()?uDoc.data():{})};
-    u.displayPts=0;
-    u.displaySub='0 Quests diesen Monat';
+    u.displayPts = uDoc.exists() ? (uDoc.data().score || 0) : 0;
+    // Count quests this month for subtitle
     try {
-      const mq=query(collection(db,'completions'),
-        where('userId','==',uid));
+      const mq=query(collection(db,'completions'), where('userId','==',uid));
       const mSnap=await getDocs(mq);
-      const monthDocs=mSnap.docs.filter(d=>{
-        const date=d.data().date||'';
-        return date.startsWith(mk);
-      });
-      u.displayPts=monthDocs.reduce((s,d)=>s+(d.data().pts||0),0);
+      const monthDocs=mSnap.docs.filter(d => (d.data().date||'').startsWith(mk));
       u.displaySub=`${monthDocs.length} Quests diesen Monat`;
-    } catch(e) { }
+    } catch(e) { u.displaySub=''; }
     users.push(u);
   }
 
@@ -3770,14 +3757,7 @@ window.resetMyPoints = async function() {
   score = 0; completed = []; lastRound = []; activeQuests = [];
   saveLocalProgress();
   try {
-    // Reset score in Firestore
     await updateDoc(doc(db,'users',currentUser.uid), {score:0});
-    // Delete all completions so leaderboard also shows 0
-    const snap = await getDocs(query(collection(db,'completions'),
-      where('userId','==',currentUser.uid)));
-    for (const d of snap.docs) {
-      try { await deleteDoc(doc(db,'completions',d.id)); } catch(e) {}
-    }
   } catch(e) {}
   el('confirmResetModal').style.display = 'none';
   updateMainUI();
