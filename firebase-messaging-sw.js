@@ -12,26 +12,29 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// Background notifications
 messaging.onBackgroundMessage(payload => {
   const { title, body, icon } = payload.notification || {};
   self.registration.showNotification(title || 'SideQuest ⚡', {
     body: body || '',
-    icon: icon || '/sidequests/icon.png',
-    badge: '/sidequests/icon.png',
+    icon: icon || 'https://lion391.github.io/sidequests/icon.png',
+    badge: 'https://lion391.github.io/sidequests/icon.png',
     vibrate: [200, 100, 200],
-    tag: payload.data?.type || 'sidequests',
-    data: payload.data || {}
+    tag: 'sidequests',
+    data: { url: 'https://lion391.github.io/sidequests/', ...payload.data }
   });
 });
 
-// Click on notification opens the app
 self.addEventListener('notificationclick', e => {
   e.notification.close();
+  const url = e.notification.data?.url || 'https://lion391.github.io/sidequests/';
   e.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-      if (list.length > 0) return list[0].focus();
-      return clients.openWindow('https://lion391.github.io/sidequests/');
+      for (const client of list) {
+        if (client.url.includes('lion391.github.io/sidequests') && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      return clients.openWindow(url);
     })
   );
 });
