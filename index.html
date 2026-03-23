@@ -1954,12 +1954,12 @@ async function loadLeaderboard() {
     const uDoc=await getDoc(doc(db,'users',uid));
     const u = {uid, name: uDoc.exists() ? (uDoc.data().name||'Anonym') : 'Anonym', photo: uDoc.exists() ? (uDoc.data().photo||null) : null, ...(uDoc.exists()?uDoc.data():{})};
     u.displayPts = uDoc.exists() ? (uDoc.data().score || 0) : 0;
-    // Count quests this month for subtitle
+    // Count quests today for subtitle
     try {
       const mq=query(collection(db,'completions'), where('userId','==',uid));
       const mSnap=await getDocs(mq);
-      const monthDocs=mSnap.docs.filter(d => (d.data().date||'').startsWith(mk));
-      u.displaySub=`${monthDocs.length} Quests diesen Monat`;
+      const todayDocs=mSnap.docs.filter(d => (d.data().date||'') === todayKey());
+      u.displaySub=`${todayDocs.length} Quests heute`;
     } catch(e) { u.displaySub=''; }
     users.push(u);
   }
