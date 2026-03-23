@@ -1954,9 +1954,9 @@ async function loadLeaderboard() {
     const uDoc=await getDoc(doc(db,'users',uid));
     const u = {uid, name: uDoc.exists() ? (uDoc.data().name||'Anonym') : 'Anonym', photo: uDoc.exists() ? (uDoc.data().photo||null) : null, ...(uDoc.exists()?uDoc.data():{})};
     u.displayPts = uDoc.exists() ? (uDoc.data().score || 0) : 0;
-    // Count quests today for subtitle
+    // Count quests today for subtitle (current group only)
     try {
-      const mq=query(collection(db,'completions'), where('userId','==',uid));
+      const mq=query(collection(db,'completions'), where('userId','==',uid), where('groupId','==',groupId));
       const mSnap=await getDocs(mq);
       const todayDocs=mSnap.docs.filter(d => (d.data().date||'') === todayKey());
       u.displaySub=`${todayDocs.length} Quests heute`;
